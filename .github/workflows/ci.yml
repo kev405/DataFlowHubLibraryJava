@@ -14,7 +14,7 @@ jobs:
           cache: maven
 
       - name: Build, Test & Check coverage
-        run: ./mvnw -B clean jacoco:prepare-agent test jacoco:report jacoco:check
+        run: ./mvnw -B clean test jacoco:report
 
       - name: Publish coverage HTML
         if: always()

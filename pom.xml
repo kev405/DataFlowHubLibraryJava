@@ -78,7 +78,7 @@
                 <goal>report</goal>
               </goals>
             </execution>
-            <!-- verifica ≥70 % -->
+            <!-- verifica ≥70 % - solo para módulos JAR -->
             <execution>
               <id>verify-coverage</id>
               <goals>
