@@ -22,3 +22,17 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Maven ─ ignora cualquier carpeta llamada 'target' en todo el árbol
+target/
+
+# Archivo binario de cobertura
+jacoco.exec
+
+# Informes HTML/XML que algún plugin pudiera dejar en la raíz
+/site/
+/surefire-reports/
+
+# IDEs
+.idea/
+.vscode/
