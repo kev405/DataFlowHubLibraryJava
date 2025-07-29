@@ -14,11 +14,20 @@ jobs:
           cache: maven
 
       - name: Build, Test & Check coverage
-        run: ./mvnw -B clean verify
+        run: ./mvnw -B clean jacoco:prepare-agent test jacoco:report jacoco:check
 
       - name: Publish coverage HTML
-        if: github.ref == 'refs/heads/main'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
           path: '**/target/site/jacoco'
+          retention-days: 30
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/target/surefire-reports'
+          retention-days: 30
