@@ -54,12 +54,24 @@ public final class User {
     }
 
     /* ---------- getters ---------- */
+
     public UUID     id()        { return id; }
     public String   name()      { return name; }
     public String   email()     { return email; }
     public UserRole role()      { return role; }
     public Instant  createdAt() { return createdAt; }
+
+    /* ──────────── contracts ──────────── */
+    @Override public boolean equals(Object o) {
+        return this == o || (o instanceof User u && id.equals(u.id));
+    }
+    @Override public int hashCode() { return id.hashCode(); }
+    @Override public String toString() {
+        return "User[" + name + ", id=" + id + ", role=" + role + "]";
+    }
+
     /* ---------- validation helpers ---------- */
+
     private static String requireNonBlank(String s, String field) {
         if (s == null || s.isBlank())
             throw new IllegalArgumentException(field + " is blank");

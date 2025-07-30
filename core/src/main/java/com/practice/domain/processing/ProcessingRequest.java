@@ -90,6 +90,16 @@ public final class ProcessingRequest {
     public User            requestedBy()    { return requestedBy; }
     public BatchJobConfig  batchJobConfig() { return batchJobConfig; }
 
+    /* ──────────────── contracts ──────────────── */
+
+    @Override public boolean equals(Object o) {
+        return this == o || (o instanceof ProcessingRequest pr && id.equals(pr.id));
+    }
+    @Override public int hashCode() { return id.hashCode(); }
+    @Override public String toString() {
+        return "ProcessingRequest[" + title + ", id=" + id + ", status=" + status + "]";
+    }
+
     /* ──────────────── helpers ──────────────── */
 
     private static String requireNonBlank(String s) {
