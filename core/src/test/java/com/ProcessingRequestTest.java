@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import com.practice.domain.datafile.DataFile;
 import com.practice.domain.processing.ProcessingRequest;
 import com.practice.domain.user.User;
+import com.practice.domain.Utils.Enums.RequestStatus;
 import com.practice.domain.Utils.Enums.UserRole;
 
 import nl.jqno.equalsverifier.EqualsVerifier;
@@ -30,11 +31,11 @@ public class ProcessingRequestTest {
     }
 
     @Test
-    void pending_toRunning_toFailed() {
+    void pending_toInProgress_toFailed() {
         ProcessingRequest r = givenPending();
-        r.markRunning();
+        r.markInProgress();
         r.markFailed();
-        assertEquals(ProcessingRequest.RequestStatus.FAILED, r.status());
+        assertEquals(RequestStatus.FAILED, r.status());
     }
 
     @Test
@@ -47,7 +48,7 @@ public class ProcessingRequestTest {
     @Test
     void illegalTransition_throws() {
         ProcessingRequest r = givenPending();
-        // Saltar RUNNING no está permitido
+        // Skipping IN_PROGRESS state is not allowed
         assertThrows(IllegalStateException.class, r::markCompleted);
     }
     

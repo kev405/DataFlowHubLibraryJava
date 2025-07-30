@@ -1,5 +1,6 @@
 package com.practice.domain.processing;
 
+import com.practice.domain.Utils.Enums.RequestStatus;
 import com.practice.domain.batchconfig.BatchJobConfig;
 import com.practice.domain.datafile.DataFile;
 import com.practice.domain.user.User;
@@ -13,16 +14,13 @@ import java.util.*;
  * Immutable in every field except {@code status}.  
  * State transitions allowed:
  * <pre>
- *      PENDING ──▶ RUNNING ──▶ COMPLETED
+ *      PENDING ──▶ IN_PROGRESS ──▶ COMPLETED
  *               └────────────▶ FAILED
  * </pre>
  * Any other transition triggers {@link IllegalStateException}.
  * </p>
  */
 public final class ProcessingRequest {
-
-    /* ──────────────── shared enum ──────────────── */
-    public enum RequestStatus { PENDING, RUNNING, COMPLETED, FAILED }
 
     /* ──────────────── fields (immutable) ──────────────── */
     private final UUID                id;
@@ -56,19 +54,19 @@ public final class ProcessingRequest {
 
     /* ──────────────── business methods ──────────────── */
 
-    /** Moves the request from PENDING → RUNNING. */
-    public synchronized void markRunning() {
-        transition(RequestStatus.PENDING, RequestStatus.RUNNING);
+    /** Moves the request from PENDING → IN_PROGRESS. */
+    public synchronized void markInProgress() {
+        transition(RequestStatus.PENDING, RequestStatus.IN_PROGRESS);
     }
 
-    /** Moves the request from RUNNING → COMPLETED. */
+    /** Moves the request from IN_PROGRESS → COMPLETED. */
     public synchronized void markCompleted() {
-        transition(RequestStatus.RUNNING, RequestStatus.COMPLETED);
+        transition(RequestStatus.IN_PROGRESS, RequestStatus.COMPLETED);
     }
 
-    /** Moves the request from RUNNING → FAILED. */
+    /** Moves the request from IN_PROGRESS → FAILED. */
     public synchronized void markFailed() {
-        transition(RequestStatus.RUNNING, RequestStatus.FAILED);
+        transition(RequestStatus.IN_PROGRESS, RequestStatus.FAILED);
     }
 
     private void transition(RequestStatus expected, RequestStatus target) {

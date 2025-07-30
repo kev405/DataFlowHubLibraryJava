@@ -42,10 +42,10 @@ public final class TestFixtures {
         );
     }
 
-    public static JobExecution newRunningExecution() {
-        // empieza en RUNNING para simplificar pruebas
+    public static JobExecution newInProgressExecution() {
+        // starts in IN_PROGRESS state to simplify tests
         ProcessingRequest req = newPendingRequest();
-        req.markRunning();
+        req.markInProgress();
         return new JobExecution(UUID.randomUUID(), req, Instant.now());
     }
 }
