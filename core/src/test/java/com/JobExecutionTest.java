@@ -52,7 +52,7 @@ public class JobExecutionTest {
 
     @Test
     void finish_setsMetricsOnce() {
-        JobExecution exec = TestFixtures.newRunningExecution();
+        JobExecution exec = TestFixtures.newInProgressExecution();
         exec.finish(
             ExecutionStatus.SUCCESS,
             Instant.now().plusSeconds(10),
