@@ -123,8 +123,6 @@ classDiagram
 
 ## 5. Estructura de módulos
 
-## 5. Estructura de módulos
-
 ```text
 my-app
 ├── pom.xml                     # POM raíz (packaging = pom)
