@@ -50,4 +50,14 @@ public final class BatchJobConfig {
     public boolean    allowRestart() { return allowRestart; }
     public Instant    createdAt()    { return createdAt; }
     public boolean    isActive()     { return active; }
+
+    /* ---------- contracts ---------- */
+    @Override public boolean equals(Object o) {
+        return (this == o) || (o instanceof BatchJobConfig cfg && id.equals(cfg.id));
+    }
+    @Override public int hashCode() { return id.hashCode(); }
+    @Override public String toString() {
+        return "BatchJobConfig[" + name + ", id=" + id + "]";
+    }
+    
 }

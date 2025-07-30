@@ -91,4 +91,16 @@ public class JobExecution {
     public long              writeCount()       { return writeCount; }
     public long              skipCount()        { return skipCount; }
     public String            errorMessage()     { return errorMessage; }
+
+    /* ──────── contracts ──────── */
+
+    @Override public boolean equals(Object o) {
+        return this == o || (o instanceof JobExecution je && id.equals(je.id));
+    }
+    @Override public int hashCode() { return id.hashCode(); }
+    @Override public String toString() {
+        return "JobExecution[id=" + id +
+               ", status=" + (exitStatus == null ? "RUNNING" : exitStatus) + "]";
+    }
+    
 }
