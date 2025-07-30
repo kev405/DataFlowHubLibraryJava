@@ -4,15 +4,14 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.practice.domain.Utils.Enums.ReaderType;
+import com.practice.domain.Utils.Enums.WriterType;
+
 /**
  * In-memory definition of a Spring-Batch job template.
  * <p>Immutable; use {@link #builder(String)} to create instances.</p>
  */
 public final class BatchJobConfig {
-
-    /* ---------- value objects ---------- */
-    public enum ReaderType { CSV, JDBC, JSON }
-    public enum WriterType { JPA, FLAT_FILE, NO_OP }
 
     /* ---------- state ---------- */
     private final UUID        id;
@@ -25,66 +24,21 @@ public final class BatchJobConfig {
     private final Instant     createdAt;
     private final boolean     active;
 
-    /* ---------- ctor hidden behind Builder ---------- */
-    private BatchJobConfig(Builder b) {
-        this.id           = b.id;
-        this.name         = b.name;
-        this.description  = b.description;
-        this.chunkSize    = b.chunkSize;
-        this.readerType   = b.readerType;
-        this.writerType   = b.writerType;
-        this.allowRestart = b.allowRestart;
-        this.createdAt    = b.createdAt;
-        this.active       = b.active;
+    /* ---------- ctor ---------- */
+    private BatchJobConfig(UUID id, String name, String description, int chunkSize,
+                           ReaderType readerType, WriterType writerType,
+                           boolean allowRestart, Instant createdAt, boolean active) {
+        this.id           = id;
+        this.name         = name;
+        this.description  = description;
+        this.chunkSize    = chunkSize;
+        this.readerType   = readerType;
+        this.writerType   = writerType;
+        this.allowRestart = allowRestart;
+        this.createdAt    = createdAt;
+        this.active       = active;
     }
 
-    /* ---------- builder ---------- */
-    public static Builder builder(String logicalName) {
-        return new Builder(logicalName);
-    }
-
-    public static final class Builder {
-        /* required */
-        private final UUID   id   = UUID.randomUUID();
-        private final String name;
-        private Instant      createdAt = Instant.now();
-
-        /* optional + defaults */
-        private String     description  = "";
-        private int        chunkSize    = 1000;
-        private ReaderType readerType   = ReaderType.CSV;
-        private WriterType writerType   = WriterType.NO_OP;
-        private boolean    allowRestart = false;
-        private boolean    active       = true;
-
-        private Builder(String logicalName) {
-            this.name = requireNonBlank(logicalName);
-        }
-
-        public Builder description(String d)   { this.description = d; return this; }
-        public Builder chunkSize(int size)     { this.chunkSize = size; return this; }
-        public Builder readerType(ReaderType r){ this.readerType = r;   return this; }
-        public Builder writerType(WriterType w){ this.writerType = w;   return this; }
-        public Builder allowRestart()          { this.allowRestart = true; return this; }
-        public Builder inactive()              { this.active = false;     return this; }
-        public Builder createdAt(Instant t)    { this.createdAt = t;      return this; }
-
-        public BatchJobConfig build() {
-            if (chunkSize <= 0) {
-                throw new IllegalArgumentException("chunkSize must be > 0");
-            }
-            Objects.requireNonNull(readerType);
-            Objects.requireNonNull(writerType);
-            Objects.requireNonNull(createdAt);
-            return new BatchJobConfig(this);
-        }
-
-        private static String requireNonBlank(String s) {
-            if (s == null || s.isBlank())
-                throw new IllegalArgumentException("name is blank");
-            return s;
-        }
-    }
 
     /* ---------- getters ---------- */
     public UUID       id()           { return id; }
