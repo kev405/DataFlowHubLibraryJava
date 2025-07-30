@@ -123,10 +123,25 @@ classDiagram
 
 ## 5. Estructura de módulos
 
-core
-├─ src/main/java/com/practice/domain/...
-├─ src/test/java/com/practice/domain/***Test.java
-└─ pom.xml
+## 5. Estructura de módulos
+
+```text
+my-app
+├── pom.xml                     # POM raíz (packaging = pom)
+├── core                        # módulo de dominio (épica E1)
+│   ├── pom.xml                 # dependencias JaCoCo, EqualsVerifier, etc.
+│   └── src
+│       ├── main
+│       │   └── java
+│       │       └── com/practice/domain/...
+│       └── test
+│           └── java
+│               └── com/practice/domain/...
+└── lib                         # reservado para la épica E2 (utilidades)
+    ├── pom.xml
+    └── src/...
+
+```
 
 ---
 
@@ -138,3 +153,5 @@ core
 
 # Abrir el reporte
 open core/target/site/jacoco/index.html
+
+```
