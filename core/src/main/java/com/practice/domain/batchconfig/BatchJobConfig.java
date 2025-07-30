@@ -1,7 +1,6 @@
 package com.practice.domain.batchconfig;
 
 import java.time.Instant;
-import java.util.Objects;
 import java.util.UUID;
 
 import com.practice.domain.Utils.Enums.ReaderType;
@@ -59,5 +58,5 @@ public final class BatchJobConfig {
     @Override public String toString() {
         return "BatchJobConfig[" + name + ", id=" + id + "]";
     }
-    
+
 }
