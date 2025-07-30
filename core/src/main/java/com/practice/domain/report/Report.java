@@ -36,7 +36,7 @@ public record Report(
             throw new IllegalArgumentException("storagePath is blank");
         if (summaryJson.isBlank())
             throw new IllegalArgumentException("summaryJson is blank");
-        if (generatedAt.isBefore(processingRequest.getCreatedAt()))
+        if (generatedAt.isBefore(processingRequest.createdAt()))
             throw new IllegalArgumentException(
                     "generatedAt must be after the request creation time");
     }

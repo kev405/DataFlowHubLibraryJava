@@ -1,16 +1,30 @@
 package com.practice.domain.processing;
 
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-
-import com.practice.domain.Utils.Enums.RequestStatus;
-import com.practice.domain.bacthconfig.BatchJobConfig;
+import com.practice.domain.batchconfig.BatchJobConfig;
 import com.practice.domain.datafile.DataFile;
 import com.practice.domain.user.User;
 
-public class ProcessingRequest {
+import java.time.Instant;
+import java.util.*;
 
+/**
+ * Logical order to execute a file-processing job.
+ * <p>
+ * Immutable in every field except {@code status}.  
+ * State transitions allowed:
+ * <pre>
+ *      PENDING ──▶ RUNNING ──▶ COMPLETED
+ *               └────────────▶ FAILED
+ * </pre>
+ * Any other transition triggers {@link IllegalStateException}.
+ * </p>
+ */
+public final class ProcessingRequest {
+
+    /* ──────────────── shared enum ──────────────── */
+    public enum RequestStatus { PENDING, RUNNING, COMPLETED, FAILED }
+
+    /* ──────────────── fields (immutable) ──────────────── */
     private final UUID                id;
     private final String              title;
     private final DataFile            dataFile;
@@ -20,48 +34,67 @@ public class ProcessingRequest {
     private final User                requestedBy;
     private final BatchJobConfig      batchJobConfig;
 
-    public ProcessingRequest(UUID id, String title, DataFile dataFile, Map<String,String> parameters, RequestStatus status, Instant createdAt, User requestedBy, BatchJobConfig batchJobConfig) {
-        this.id = id;
-        this.title = title;
-        this.dataFile = dataFile;
-        this.parameters = Map.copyOf(parameters);
-        this.status = status;
-        this.createdAt = createdAt;
-        this.requestedBy = requestedBy;
-        this.batchJobConfig = batchJobConfig;
+    /* ──────────────── ctor ──────────────── */
+    public ProcessingRequest(
+            UUID id,
+            String title,
+            DataFile dataFile,
+            Map<String,String> parameters,
+            User requestedBy,
+            BatchJobConfig batchJobConfig,
+            Instant createdAt
+    ) {
+        this.id             = Objects.requireNonNull(id);
+        this.title          = requireNonBlank(title);
+        this.dataFile       = Objects.requireNonNull(dataFile);
+        this.parameters     = Map.copyOf(Objects.requireNonNull(parameters));
+        this.status         = RequestStatus.PENDING;
+        this.requestedBy    = Objects.requireNonNull(requestedBy);
+        this.batchJobConfig = Objects.requireNonNull(batchJobConfig);
+        this.createdAt      = Objects.requireNonNull(createdAt);
     }
 
-    /* ----- getters ----- */
-    public UUID getId() {   
-        return id;
+    /* ──────────────── business methods ──────────────── */
+
+    /** Moves the request from PENDING → RUNNING. */
+    public synchronized void markRunning() {
+        transition(RequestStatus.PENDING, RequestStatus.RUNNING);
     }
-    public String getTitle() {
-        return title;
+
+    /** Moves the request from RUNNING → COMPLETED. */
+    public synchronized void markCompleted() {
+        transition(RequestStatus.RUNNING, RequestStatus.COMPLETED);
     }
-    public DataFile getDataFile() {
-        return dataFile;
+
+    /** Moves the request from RUNNING → FAILED. */
+    public synchronized void markFailed() {
+        transition(RequestStatus.RUNNING, RequestStatus.FAILED);
     }
-    public Map<String, String> getParameters() {
-        return parameters;
-    }
-    public RequestStatus getStatus() {
-        return status;
-    }
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-    public User getRequestedBy() {
-        return requestedBy;
-    }
-    public BatchJobConfig getBatchJobConfig() {
-        return batchJobConfig;
-    }
-    /* ----- negocio ----- */
-    public void updateStatus(RequestStatus newStatus) {
-        if (newStatus == null) {
-            throw new IllegalArgumentException("Status cannot be null");
+
+    private void transition(RequestStatus expected, RequestStatus target) {
+        if (this.status != expected) {
+            throw new IllegalStateException(
+                "Cannot move from " + status + " to " + target);
         }
-        this.status = newStatus;
+        this.status = target;
     }
-    
+
+    /* ──────────────── getters ──────────────── */
+
+    public UUID            id()             { return id; }
+    public String          title()          { return title; }
+    public DataFile        dataFile()       { return dataFile; }
+    public Map<String,String> parameters()  { return parameters; }
+    public RequestStatus   status()         { return status; }
+    public Instant         createdAt()      { return createdAt; }
+    public User            requestedBy()    { return requestedBy; }
+    public BatchJobConfig  batchJobConfig() { return batchJobConfig; }
+
+    /* ──────────────── helpers ──────────────── */
+
+    private static String requireNonBlank(String s) {
+        if (s == null || s.isBlank())
+            throw new IllegalArgumentException("title is blank");
+        return s;
+    }
 }
