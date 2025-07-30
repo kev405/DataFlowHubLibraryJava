@@ -97,6 +97,8 @@ classDiagram
     ProcessingRequest "1" --> "many" JobExecution  : retries
     ProcessingRequest "1" --> "0..1" Report        : result
 
+```
+
 ---
 
 ## 3. Principios aplicados
