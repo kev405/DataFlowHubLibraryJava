@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import com.practice.domain.datafile.DataFile;
 import com.practice.domain.jobexecution.JobExecution;
 import com.practice.domain.user.User;
-import com.practice.domain.Utils.Enums.ExecutionStatus;
-import com.practice.domain.Utils.Enums.UserRole;
+import com.practice.domain.utils.enums.ExecutionStatus;
+import com.practice.domain.utils.enums.UserRole;
 
 import nl.jqno.equalsverifier.EqualsVerifier;
 

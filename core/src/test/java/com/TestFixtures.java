@@ -1,11 +1,11 @@
 package com;
 
-import com.practice.domain.Utils.Enums.UserRole;
 import com.practice.domain.batchconfig.BatchJobConfig;
 import com.practice.domain.datafile.DataFile;
 import com.practice.domain.jobexecution.JobExecution;
 import com.practice.domain.processing.ProcessingRequest;
 import com.practice.domain.user.User;
+import com.practice.domain.utils.enums.UserRole;
 
 import java.time.Instant;
 import java.util.Map;

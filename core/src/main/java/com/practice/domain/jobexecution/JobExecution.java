@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.practice.domain.Utils.Enums.ExecutionStatus;
 import com.practice.domain.processing.ProcessingRequest;
+import com.practice.domain.utils.enums.ExecutionStatus;
 
 /**
  * Runtime record of a single execution attempt for a {@link ProcessingRequest}.

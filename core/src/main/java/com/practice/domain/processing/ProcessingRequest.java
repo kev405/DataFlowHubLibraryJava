@@ -1,9 +1,9 @@
 package com.practice.domain.processing;
 
-import com.practice.domain.Utils.Enums.RequestStatus;
 import com.practice.domain.batchconfig.BatchJobConfig;
 import com.practice.domain.datafile.DataFile;
 import com.practice.domain.user.User;
+import com.practice.domain.utils.enums.RequestStatus;
 
 import java.time.Instant;
 import java.util.*;

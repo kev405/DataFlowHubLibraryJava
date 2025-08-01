@@ -1,4 +1,4 @@
-package com.practice.domain.Utils.Enums;
+package com.practice.domain.utils.enums;
 
 public enum RequestStatus {
     PENDING,

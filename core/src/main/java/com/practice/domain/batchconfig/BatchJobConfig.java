@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.practice.domain.Utils.Enums.ReaderType;
-import com.practice.domain.Utils.Enums.WriterType;
+import com.practice.domain.utils.enums.ReaderType;
+import com.practice.domain.utils.enums.WriterType;
 
 /**
  * In-memory definition of a Spring-Batch job template.
