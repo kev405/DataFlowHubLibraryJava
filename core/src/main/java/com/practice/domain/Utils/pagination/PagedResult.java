@@ -19,8 +19,9 @@ public record PagedResult<T>(
     }
 
     /** Maps each item and returns a new immutable PagedResult. */
+    @SuppressWarnings("unchecked")
     public <R> PagedResult<R> map(Function<? super T, ? extends R> f) {
-        List<R> mapped = items.stream().map(f).toList();
+        var mapped = (List<R>) items.stream().map(f).toList();
         return new PagedResult<>(mapped, page, size, total);
     }
 }
