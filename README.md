@@ -159,7 +159,7 @@ open core/target/site/jacoco/index.html
 ### InMemoryCache – LRU
 
 ```java
-import com.tuempresa.util.cache.LruCache;
+import com.utils.cache.LruCache;
 import java.util.Optional;
 import java.util.UUID;
 
