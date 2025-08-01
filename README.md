@@ -153,3 +153,56 @@ my-app
 open core/target/site/jacoco/index.html
 
 ```
+
+---
+
+### InMemoryCache – LRU
+
+```java
+import com.utils.cache.LruCache;
+import java.util.Optional;
+import java.util.UUID;
+
+LruCache<UUID, User> cache = new LruCache<>(1_000);
+
+cache.put(user.getId(), user);
+Optional<User> maybe = cache.get(user.getId());
+
+System.out.println("hits=" + cache.hitCount() + ", miss=" + cache.missCount());
+
+```
+
+Si insertas 1 001 usuarios, el más antiguo se descarta automáticamente.
+
+---
+
+## 7. Diseño interno
+
+| Componente      | Elección                           | Razón                                                          |
+| --------------- | ---------------------------------- | -------------------------------------------------------------- |
+| Contenedor base | `LinkedHashMap` *access-order*     | Reordenamiento automático y `removeEldestEntry` para expulsión |
+| Concurrencia    | `ReentrantReadWriteLock`           | Muchos lectores, un escritor                                   |
+| Métricas        | `volatile long hitCount/missCount` | Lectura coherente sin bloqueo                                  |
+
+
+---
+
+## 8. ¿Para qué sirve?
+
+| Caso de uso                                             | Beneficio                                    |
+|---------------------------------------------------------|----------------------------------------------|
+| Resolver **User** por **UUID** miles de veces en un job | Reduce I/O a BD o estructuras de gran tamaño |
+| Guardar configuraciones repetidamente leídas            | Evita parseo / IO redundante                 |
+
+---
+
+## 9. LRU vs TTL (futuro)
+
+| Estrategia | Ventaja principal                                      | Uso recomendado                                  |
+| ---------- | ------------------------------------------------------ | ------------------------------------------------ |
+| **LRU**    | Mantiene en memoria los elementos usados recientemente | Lecturas muy frecuentes con cache de tamaño fijo |
+| **TTL**    | Expira elementos tras X tiempo, sin importar el uso    | Configuraciones que cambian periódicamente       |
+
+(Se incluye TtlCache<K,V> como referencia, aún no productiva.)
+
+---
