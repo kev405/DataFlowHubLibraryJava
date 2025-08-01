@@ -26,14 +26,14 @@
   </dependencies>
   
   <!-- Skip JaCoCo coverage check for this placeholder module -->
-  <build>
+  <!-- <build>
     <plugins>
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <configuration>
+        <configuration> -->
           <!-- Skip all JaCoCo check executions for this module -->
-          <skip>true</skip>
+          <!-- <skip>true</skip>
         </configuration>
         <executions>
           <execution>
@@ -45,5 +45,5 @@
         </executions>
       </plugin>
     </plugins>
-  </build>
+  </build> -->
 </project>

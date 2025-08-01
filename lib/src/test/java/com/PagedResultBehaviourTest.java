@@ -2,7 +2,7 @@ package com;
 
 import org.junit.jupiter.api.Test;
 
-import com.practice.domain.utils.pagination.PagedResult;
+import com.utils.pagination.PagedResult;
 
 import java.util.List;
 

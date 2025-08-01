@@ -1,4 +1,4 @@
-package com.practice.domain.utils.pagination;
+package com.utils.pagination;
 
 import java.util.List;
 import java.util.function.Function;
