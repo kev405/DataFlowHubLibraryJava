@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.practice.domain.Utils.Enums.UserRole;
+import com.practice.domain.utils.enums.UserRole;
 
 /**
  * Represents an operator of the platform.
