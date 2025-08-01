@@ -21,7 +21,7 @@ public class LruCacheConcurrentTest {
         LruCache<Integer, String> cache = new LruCache<>(2);
         cache.put(1, "A");
         cache.put(2, "B");
-        cache.put(3, "C"); // debe expulsar la clave 1
+        cache.put(3, "C"); // should evict key 1
         assertTrue(cache.get(1).isEmpty(), "oldest entry was not evicted");
         assertEquals(2, cache.size());
     }
