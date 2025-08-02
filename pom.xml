@@ -107,6 +107,10 @@
                 </limits>
               </rule>
             </rules>
+            <excludes>
+              <exclude>com/bench/**</exclude>
+              <exclude>com/bench/jmh_generated/**</exclude>
+            </excludes>
           </configuration>
           <executions>
             <!-- prepara agente para instrumentar código -->

@@ -206,3 +206,31 @@ Si insertas 1 001 usuarios, el más antiguo se descarta automáticamente.
 (Se incluye TtlCache<K,V> como referencia, aún no productiva.)
 
 ---
+
+### Resultados definitivos JMH (HU F1-10)
+
+_Comando ejecutado_  
+```bash
+java -jar lib/target/benchmarks.jar \
+     -rf CSV -rff bench.csv \
+     -tu ms -f 1 -wi 2 -i 3 -w 2s -r 2s
+
+```
+
+| Operación (dataset = 1 000 000) | ArrayList<br>(ms / op)  | LinkedList<br>(ms / op) | Ganador        |
+| ------------------------------- | ----------------------- | ----------------------- | -------------- |
+| **addLast** `list.add(x)`       | **0.000020 ± 0.000120** | 0.000138 ± 0.000025     | **ArrayList**  |
+| **addFirst** `list.add(0,x)`    | 0.078022 ± 0.061059     | **0.000134 ± 0.000031** | **LinkedList** |
+| **random get** `list.get(rnd)`  | **0.000025 ± 0.000039** | 0.625891 ± 2.060440     | **ArrayList**  |
+| **full iteration** `for-each`   | **1.582198 ± 4.929957** | 3.701233 ± 29.944820    | **ArrayList**  |
+
+
+Interpretación rápida
+
+ArrayList domina en acceso aleatorio (get), inserción al final y recorrido secuencial.
+
+LinkedList solo gana en inserción al inicio de la lista (addFirst) con colecciones muy grandes.
+
+Para la mayoría de casos de lectura y escritura al final, ArrayList es la opción recomendada.
+
+---
