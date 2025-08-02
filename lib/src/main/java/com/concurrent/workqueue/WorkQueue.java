@@ -1,4 +1,4 @@
-package com.workqueue;
+package com.concurrent.workqueue;
 
 import java.util.ArrayList;
 import java.util.List;

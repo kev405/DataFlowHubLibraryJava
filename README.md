@@ -331,5 +331,19 @@ try (WorkQueue workQueue = new WorkQueue()) {
 | Back-pressure    | Si limitas la capacidad, `submit()` bloquea al llenar la cola.    |
 | Shutdown limpio  | `stop()` envía POISON PILL + `join()` sin `InterruptedException`. |
 
+---
+
+### HU F1-17 – Race Condition & Fixes
+
+| Versión | Primitiva | Resultado | Rendimiento |
+|---------|-----------|-----------|-------------|
+| Buggy   | `int` sin sincronización | Pierde incrementos | Rápido pero incorrecto |
+| Fix #1  | `AtomicInteger` | Correcto | Mejor que lock bajo contención alta |
+| Fix #2  | `ReentrantLock` | Correcto | Latencia mayor, pero permite operaciones compuestas |
+
+**Modelo de memoria (simplificado)**  
+* Escribir en un `int` no es atómico → dos hilos pueden leer-modificar-escribir simultáneamente.  
+* `AtomicInteger` ofrece operación **CAS** -> _happens-before_ y visibilidad.  
+* `ReentrantLock` establece un **monitor** → exclusión mutua + semántica _happens-before_ en `unlock()` / `lock()`.
 
 ---
