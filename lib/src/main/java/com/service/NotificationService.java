@@ -22,7 +22,7 @@ public final class NotificationService implements AutoCloseable {
         this.pool = Executors.newFixedThreadPool(poolSize);
     }
 
-    /** Default constructor: 4 threads as suggested in the HU. */
+    /** Default constructor: uses 4 threads as a sensible default. */
     public NotificationService() {
         this(4);
     }
