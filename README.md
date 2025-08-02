@@ -291,3 +291,26 @@ Opción **verbose=false** limita a 5 líneas de stack para logs limpios.
 La CI fallará si se cambia la excepción lanzada o se reduce la cobertura.
 
 ---
+
+## E4 – Concurrency Playground
+
+### HU F1-15 – NotificationService (ExecutorService)
+
+```java
+NotificationService svc = new NotificationService();          // 4 threads
+Notification n = new Notification(user.getEmail(), "Job done");
+Future<Boolean> ok = svc.send(n);
+
+if (ok.get()) log.info("Email sent!");
+svc.shutdown();
+svc.awaitTermination(5, SECONDS);
+
+```
+
+| Criterio de aceptación | Resultado                                           |
+| ---------------------- | --------------------------------------------------- |
+| 100 envíos en paralelo | ✔️ completan < 5 s sin `RejectedExecutionException` |
+| `shutdown()` ordenado  | ✔️ termina < 2 s                                    |
+| Cobertura playground   | 80 % en paquete `concurrent.notification`           |
+
+---
