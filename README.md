@@ -274,7 +274,20 @@ com.dataflowhub.core.exception.DatabaseUnavailableException: db down
 
 ```
 
-El prefijo [CODE] permite filtrar rápidamente en Kibana/Grafana;
-si verbose es false, solo se muestran las 5 primeras líneas del stack-trace.
+*Prefijo `[CODE]` permite dashboards rápidos en Kibana / Grafana.*  
+Opción **verbose=false** limita a 5 líneas de stack para logs limpios.
+
+---
+
+### Tests de Excepciones (HU F1-14)
+
+| Método bajo prueba | Excepción esperada | Test                                                                 |
+|--------------------|--------------------|----------------------------------------------------------------------|
+| `CsvParser.parse()`             | `InvalidFileFormatException` | `CsvParserStubTest`                                                 |
+| `TtlCache.put()` (cuando falla executor) | `InfraException`              | `TtlCacheFailureTest`                                               |
+| `ProcessingRequest` constructor | `NullPointerException` / `IllegalArgumentException` | `ProcessingRequestValidationTest` |
+
+*Cada excepción declarada cuenta con al menos un test; la cobertura supera el 75 %.*  
+La CI fallará si se cambia la excepción lanzada o se reduce la cobertura.
 
 ---
