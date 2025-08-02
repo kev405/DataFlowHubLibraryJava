@@ -262,3 +262,19 @@ classDiagram
 ```
 
 ---
+
+### Ejemplo de salida `ErrorHandler`
+
+```text
+[DB_DOWN] DatabaseUnavailableException: db down
+com.dataflowhub.core.exception.DatabaseUnavailableException: db down
+    at com.dataflowhub.core.repository.JobRepository.save(JobRepository.java:42)
+    at com.dataflowhub.core.service.JobService.create(JobService.java:57)
+    at ...
+
+```
+
+El prefijo [CODE] permite filtrar rápidamente en Kibana/Grafana;
+si verbose es false, solo se muestran las 5 primeras líneas del stack-trace.
+
+---
