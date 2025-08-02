@@ -247,3 +247,18 @@ Para la mayoría de casos de lectura y escritura al final, ArrayList es la opci�
 Esto permite una API flexible y segura, sin _casts_ ni _raw types_.
 
 ---
+
+### Jerarquía de Excepciones
+
+```mermaid
+classDiagram
+    Exception <|-- DataflowException
+    DataflowException <|-- DomainException
+    RuntimeException <|-- InfraException
+    DomainException <|-- InvalidFileFormatException
+    DomainException <|-- UserNotFoundException
+    InfraException <|-- DatabaseUnavailableException
+
+```
+
+---
