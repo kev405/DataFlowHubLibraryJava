@@ -314,3 +314,22 @@ svc.awaitTermination(5, SECONDS);
 | Cobertura playground   | 80 % en paquete `concurrent.notification`           |
 
 ---
+
+### HU F1-16 – WorkQueue (BlockingQueue)
+
+```java
+try (WorkQueue workQueue = new WorkQueue()) {
+    workQueue.startWorkers(3);
+    jobs.forEach(job -> workQueue.submit(() -> process(job)));
+} // auto-close ⇒ stop()
+
+```
+
+| Ventaja          | Detalle                                                           |
+| ---------------- | ----------------------------------------------------------------- |
+| Distribuye carga | Productores delegan a consumidores concurrentes.                  |
+| Back-pressure    | Si limitas la capacidad, `submit()` bloquea al llenar la cola.    |
+| Shutdown limpio  | `stop()` envía POISON PILL + `join()` sin `InterruptedException`. |
+
+
+---
