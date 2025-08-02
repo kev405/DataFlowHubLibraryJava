@@ -2,7 +2,7 @@ package com;
 
 import org.junit.jupiter.api.Test;
 
-import com.workqueue.WorkQueue;
+import com.concurrent.workqueue.WorkQueue;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
