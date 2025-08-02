@@ -234,3 +234,16 @@ LinkedList solo gana en inserción al inicio de la lista (addFirst) con coleccio
 Para la mayoría de casos de lectura y escritura al final, ArrayList es la opción recomendada.
 
 ---
+
+### CollectionUtils – métodos con wildcards
+
+| Método | Firma | PECS aplicado |
+|--------|-------|--------------|
+| `copy` | `<T> List<T> copy(List<? extends T> src)` | **Producer Extends** |
+| `addAll` | `<T> void addAll(Collection<? super T> dst, Collection<? extends T> src)` | **Consumer Super / Producer Extends** |
+| `deepUnmodifiable` | `<K,V> Map<K,V> deepUnmodifiable(Map<? extends K,? extends V> src)` | Ambos “extends” |
+
+**Regla PECS**: *Producer Extends* (fuentes producen objetos → `? extends`), *Consumer Super* (destinos consumen objetos → `? super`).  
+Esto permite una API flexible y segura, sin _casts_ ni _raw types_.
+
+---
