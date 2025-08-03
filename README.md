@@ -347,3 +347,21 @@ try (WorkQueue workQueue = new WorkQueue()) {
 * `ReentrantLock` establece un **monitor** → exclusión mutua + semántica _happens-before_ en `unlock()` / `lock()`.
 
 ---
+
+### HU F1-18 – ReportAggregator (CompletableFuture)
+
+```java
+ReportAggregator ra = new ReportAggregator();
+ra.generate("id-123")
+  .thenAccept(r -> log.info("Ready: {}", r.summary()))
+  .join();            // bloquea en demo; en producción, se encadena
+```
+
+| Ventaja               | Detalle                                                                     |
+| --------------------- | --------------------------------------------------------------------------- |
+| **Paralelismo**       | `supplyAsync` lanza tareas A, B, C en el *commonPool*; total ≤ máx(tareas). |
+| **Composición**       | `thenCombine` + `thenApply` fusionan resultados sin *callback hell*.        |
+| **Manejo de errores** | `exceptionally` registra con `ErrorHandler` y propaga causa unificada.      |
+
+---
+
