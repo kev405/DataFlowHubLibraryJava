@@ -26,6 +26,7 @@
               <version>${jmh.version}</version>
             </path>
           </annotationProcessorPaths>
+          <generatedSourcesDirectory>${project.build.directory}/generated-sources/annotations</generatedSourcesDirectory>
         </configuration>
       </plugin>
       <plugin>

@@ -387,3 +387,33 @@ Transaction::user, summingDouble(Transaction::amount)))
 **Complejidad total**: _O(n log n)_ debido a la fase de ordenación.
 
 ---
+
+## Streams paralelos – Benchmark `stream()` vs `parallelStream()` (HU F1-20)
+
+| Operación                               | Dataset                | Secuencial (ms/op) | Paralelo (ms/op) | Speed-up |
+|-----------------------------------------|------------------------|--------------------|------------------|----------|
+| **Suma de 10 000 000 doubles**          | 10 M elementos         | 30.554 ± 3.189     | **2.764 ± 0.184**| **× 11 ≈** |
+| **Map + reduce 100 000 JobExecution**   | 100 k elementos        | **0.076 ± 0.014**  | 0.083 ± 0.008    | × 0.92 (peor) |
+
+> *Tiempos promedio (modo **AverageTime**) tras 2 warm-ups + 3 mediciones; unidad = ms/op.*
+
+### Conclusiones rápidas
+
+* **Cálculo numérico masivo**  
+  *La suma de 10 M doubles se acelera ≈ 11 ×* gracias al fork-join: cada hilo procesa unos 2,5 M elementos y la sobrecarga de división/combina se amortiza.
+
+* **Datasets medianos o pipelines ligeros**  
+  Map-reduce sobre 100 k objetos **empeora** en paralelo (× 0.92).  
+  Cuando la operación por elemento es muy barata, la sobrecarga de *fork-join* y la fusión de resultados supera al trabajo útil.
+
+* **Regla práctica**  
+  - Usa `parallelStream()` para colecciones **muy grandes** (≈ > 1 M) o tareas CPU-bound costosas.  
+  - Evítalo en datasets pequeños, operaciones I/O-bound o servidores donde el *commonPool* ya está saturado.
+
+* **Fork-join pool**  
+  `parallelStream()` utiliza el **ForkJoinPool.commonPool** (≈ nº de núcleos).  
+  Puedes ajustar su tamaño con  
+  ```java
+  System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", "8");
+  ```
+  o emplear tu propio ForkJoinPool si necesitas aislar cargas.
