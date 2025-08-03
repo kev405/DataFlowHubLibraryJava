@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99,9%)","Unit","Param: doubles","Param: jobs"
+"com.bench.ParallelStreamBench.mapReduce_parallel","avgt",1,3,"0,038251","0,009710","ms/op",10000000,100000
+"com.bench.ParallelStreamBench.mapReduce_sequential","avgt",1,3,"0,076453","0,014449","ms/op",10000000,100000
+"com.bench.ParallelStreamBench.sum_parallel","avgt",1,3,"2,763578","0,183523","ms/op",10000000,100000
+"com.bench.ParallelStreamBench.sum_sequential","avgt",1,3,"30,553956","3,189278","ms/op",10000000,100000
