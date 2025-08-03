@@ -365,3 +365,25 @@ ra.generate("id-123")
 
 ---
 
+### HU F1-19 – KPI Streams Pipeline
+
+```java
+total = transactions.stream() // fuente
+.filter(t -> t.status() == VALID) // interm. 1
+.collect(groupingBy( // interm. 2 + terminal
+Transaction::user, summingDouble(Transaction::amount)))
+.entrySet().stream() // nuevo stream
+.sorted(comparingByValue().reversed())// interm. 3
+.collect(toMap(..., LinkedHashMap::new));
+```
+
+| Operación Stream | Tipo | Complejidad |
+|------------------|------|-------------|
+| `filter`         | intermedia | O(n) |
+| `groupingBy + sum` | terminal (con cola intermedia) | O(n) |
+| `sorted`         | intermedia | O(n log n) |
+| `collect(toMap)` | terminal | O(n) |
+
+**Complejidad total**: _O(n log n)_ debido a la fase de ordenación.
+
+---
