@@ -120,6 +120,8 @@
             <excludes>
               <exclude>com/bench/**</exclude>
               <exclude>com/bench/jmh_generated/**</exclude>
+              <exclude>com/practice/bench/**</exclude>
+              <exclude>com/practice/bench/jmh_generated/**</exclude>
             </excludes>
           </configuration>
           <executions>
