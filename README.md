@@ -475,3 +475,32 @@ Regla adoptada: guardar JSON siempre en UTF-8, sin dependencias de Spring; los m
 
 ---
 
+### Serialización nativa (HU F1-24) — datos medidos
+
+| Métrica sobre 10 000 objetos        | JSON (Gson) | Externalizable | Ventaja |
+|-------------------------------------|-------------|----------------|---------|
+| **Tiempo serializar** (promedio)    | 4,01 ms/op  | **2,63 ms/op** | **≈ 1,5 ×** más rápido |
+| **Tiempo calcular tamaño**<br>(`size_*` benchmark) | **0,20 ms/op** | 2,69 ms/op | JSON obtiene longitud de `String`; llamada binaria necesita copiar buffer |
+| **Tamaño total en disco** (previo)  | 250 KB      | **120 KB**     | 2,1 × más compacto |
+
+> _Resultados obtenidos en la misma JVM y máquina (cuatro núcleos),  
+> 3 warm-ups + 3 mediciones (`jmh` modo **AverageTime**, unidad = ms/op)._  
+
+#### Observaciones
+
+* **Externalizable** continúa duplicando la compresión (120 KB vs 250 KB) y ahora es ~50 % más veloz al serializar.  
+* El benchmark `size_*` sólo mide el coste de calcular el tamaño, no el tamaño en sí; por eso JSON es más rápido ahí (simple `String.length`).  
+* En deserialización (no mostrado) la tendencia es similar: binario evita parseo de texto.
+
+#### Pros / Contras rápidos
+
+| Externalizable (binario)                                | JSON (texto legible)                     |
+|---------------------------------------------------------|------------------------------------------|
+| ✔  Tamaño más pequeño y latencia menor                  | ✔  Humano-legible, diff-friendly         |
+| ✔  Controlas qué campos escribes (versión 100 % manual) | ✔  Portabilidad entre lenguajes          |
+| ❌  No legible / requiere versión explícita             | ❌  Mayor tamaño y parseo más costoso     |
+
+> **Regla práctica** Utiliza serialización binaria sólo en caminos «hot-path» controlados enteramente por Java; mantén JSON para integración, logs o configuración donde la legibilidad y portabilidad pesan más.
+
+---
+
