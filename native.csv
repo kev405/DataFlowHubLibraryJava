@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99,9%)","Unit"
+"com.practice.bench.ExternalizationBench.serialize_externalizable","avgt",1,3,"2,633140","0,246468","ms/op"
+"com.practice.bench.ExternalizationBench.serialize_json","avgt",1,3,"4,011302","0,084631","ms/op"
+"com.practice.bench.ExternalizationBench.size_externalizable","avgt",1,3,"2,684816","0,404327","ms/op"
+"com.practice.bench.ExternalizationBench.size_json","avgt",1,3,"0,202967","0,015762","ms/op"
