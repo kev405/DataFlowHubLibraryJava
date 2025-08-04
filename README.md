@@ -504,3 +504,19 @@ Regla adoptada: guardar JSON siempre en UTF-8, sin dependencias de Spring; los m
 
 ---
 
+### CSV utilitario (HU F1-25)
+
+```java
+Path csv = Path.of("requests.csv");
+CsvUtil.writeRequests(csv, list, UTF_8, ';');   // guardar
+List<ProcessingRequest> back =
+        CsvUtil.readRequests(csv, UTF_8, ';');  // leer
+```
+
+java.nio (Files.newBufferedReader/Writer) evita librerías pesadas.
+
+Manejo correcto de salto de línea (Windows/Linux) gracias a BufferedWriter.newLine().
+
+Charset configurable; por defecto usamos UTF-8 para compatibilidad.
+
+Lógica O(n) simple: dividir cadena + join. Para CSV complejo (citas, escapes) considerar OpenCSV / Univocity.
