@@ -417,3 +417,22 @@ Transaction::user, summingDouble(Transaction::amount)))
   System.setProperty("java.util.concurrent.ForkJoinPool.common.parallelism", "8");
   ```
   o emplear tu propio ForkJoinPool si necesitas aislar cargas.
+
+  ---
+
+  ### HU F1-21 – Normalización de fechas (java.time)
+
+```java
+Instant start = job.getStartTime();           // almacenado en UTC
+Duration d = TimeUtil.between(start, TimeUtil.nowUtc());
+log.info("Duración: {} s", d.getSeconds());
+```
+
+Almacena en UTC (Instant) y convierte a zona de usuario en la vista.
+
+No se usan Date / Calendar; la API moderna es inmutable y thread-safe.
+
+Complejidad O(1) en todas las utilidades; solo cálculos aritméticos o acceso a campos.
+
+---
+
