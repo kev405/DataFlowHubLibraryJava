@@ -436,3 +436,23 @@ Complejidad O(1) en todas las utilidades; solo cálculos aritméticos o acceso a
 
 ---
 
+## Optional Best Practices
+
+| ✅ DO | ❌ DON’T |
+|-------|---------|
+| Retornar `Optional<T>` en vez de `null`. | Encadenar `Optional.get()` sin `isPresent()`. |
+| Usar `map`, `flatMap`, `orElse`, `orElseThrow`. | Aceptar `Optional` como argumento público (mejor `@Nullable` parámetro o sobrecarga). |
+| Emplear utilidades como `OptionalUtil.firstPresent(...)` para evitar cascadas de `ifPresent`. | Usar `Optional` en campos de entidad (incrementa coste de serialización). |
+
+> **Nota:** Guarda valores ausentes como `Optional.empty()`, no como `null` dentro del `Optional`.
+
+Ejemplo práctico:
+
+```java
+Optional<Report> maybe = reportRepo.findByRequestId(id);
+String path = maybe.map(Report::getFilePath)
+                   .orElse("/placeholder.txt");
+```
+
+---
+
