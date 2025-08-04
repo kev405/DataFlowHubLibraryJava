@@ -542,3 +542,62 @@ Los reportes HTML se generan en `target/quality-reports/index.html` para cada m�
 
 ---
 
+# Fase 1 – Resumen General
+
+## Objetivos cumplidos
+- ☑️ **Setup** multi-módulo (`core`, `lib`) con CI y cobertura ≥ 75 %.
+- ☑️ **Dominio** modelado (User, DataFile, ProcessingRequest, …) aplicando OOP sólido.
+- ☑️ **Colecciones & Genéricos**: `PagedResult<T>`, `InMemoryCache`, micro-benchmark ArrayList vs LinkedList.
+- ☑️ **Concurrencia básica**: `NotificationService`, `WorkQueue`, demo de *race-condition* y `CompletableFuture`.
+- ☑️ **Streams & Lambdas**: `KpiCalculator`, benchmark `parallelStream()`.
+- ☑️ **I/O & Serialización**: JSON “ligero”, `Externalizable`, `CsvUtil` con `java.nio`.
+- ☑️ **Calidad transversal**: análisis estático (SpotBugs, Checkstyle, PMD), JMH, Javadoc 80 %.
+
+---
+
+## Conceptos practicados
+- **OOP** (encapsulación, inmutabilidad, patrón Builder/Factory).  
+- **Streams & Collectors** (`groupingBy`, `mapping`, paralelos).  
+- **Generics avanzados** (wildcards `? extends / super`).  
+- **Concurrencia** (`ExecutorService`, `BlockingQueue`, `AtomicInteger`, `ReentrantLock`).  
+- **java.time** (`Instant`, `LocalDate`, zonas).  
+- **Optional** (best practices, utilidades).  
+- **I/O / NIO.2** (Paths, Files, charsets).  
+- **Benchmarking** (JMH).  
+- **Calidad** (JaCoCo, SpotBugs, Checkstyle, PMD).  
+- **Javadoc** generada y publicada.  
+
+---
+
+## Principales aprendizajes
+1. **Trade-offs en estructuras de datos** – benchmark mostró cuándo `LinkedList` vence a `ArrayList` solo en inserciones al inicio con datasets grandes.  
+2. **Overhead de `parallelStream()`** – speed-up real sólo con > 1 M elementos CPU-bound.  
+3. **Externalizable vs JSON** – binario 2× más pequeño y rápido, pero pierde portabilidad/legibilidad.  
+4. **Evitar *data races*** – `AtomicInteger` ofrece CAS barato; locks útiles para operaciones compuestas.  
+5. **Calidad automatizada** – build falla temprano; menor tiempo de revisión manual.
+
+---
+
+## Gaps / dificultades detectadas
+- Necesidad de profundizar en **JMH avanzado** (profiler, warm-up adecuado).  
+- PMD marcó complejidad > 15 en algunos métodos; pendiente refactorizar.  
+- Cobertura JaCoCo de *benchmarks* excluida; explorar integración con `jacoco:agent` para medición real.  
+- Falta prueba de integración end-to-end (JSON ↔ CSV ↔ Report).
+
+---
+
+## Próximos pasos (Fase 2)
+| Área | Acción | Enlace |
+|------|--------|--------|
+| **Refactor** | Reducir complejidad de `ProcessingRequest.Builder`. | #REF-TICKET-123 |
+| **Performance** | Añadir benchmarks para *I/O* (Buffered vs NIO channels). | perf-board |
+| **Observabilidad** | Integrar logs estructurados + metrics Micrometer. | board-fase-2 |
+| **Persistencia** | Prototipo con Spring Batch + H2. | board-fase-2 |
+| **Automatización** | Publicar *GitHub Pages* con Javadoc y JaCoCo badge. | PR #XYZ |
+
+> **Cobertura actual:** 78 % (core) • 85 % (lib)  
+> **Benchmarks clave:** *externalizable vs JSON* (×1.5 speed-up) / *parallelStream suma* (×11 speed-up).
+
+---
+
+_Fase 1 establecida como base sólida; lista para escalar a integración, observabilidad y optimización avanzada en la siguiente etapa._
