@@ -3,6 +3,7 @@ package com.utils.cache;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -17,8 +18,8 @@ public class LruCache<K, V> {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     /* optional metrics */
-    private volatile long hitCount;
-    private volatile long missCount;
+    private final AtomicLong hitCount = new AtomicLong(0);
+    private final AtomicLong missCount = new AtomicLong(0);
 
     public LruCache(int capacity) {
         if (capacity <= 0) throw new IllegalArgumentException("capacity <= 0");
@@ -26,7 +27,7 @@ public class LruCache<K, V> {
         this.map = new LinkedHashMap<>(16, .75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-                return size() > LruCache.this.capacity;
+                return super.size() > LruCache.this.capacity;
             }
         };
     }
@@ -45,7 +46,11 @@ public class LruCache<K, V> {
         lock.readLock().lock();
         try {
             V val = map.get(key);
-            if (val == null) missCount++; else hitCount++;
+            if (val == null) {
+                missCount.incrementAndGet();
+            } else {
+                hitCount.incrementAndGet();
+            }
             return Optional.ofNullable(val);
         } finally { lock.readLock().unlock(); }
     }
@@ -70,6 +75,6 @@ public class LruCache<K, V> {
 
     // ---------- optional metrics -------------------------------------------
 
-    public long hitCount()  { return hitCount;  }
-    public long missCount() { return missCount; }
+    public long hitCount()  { return hitCount.get();  }
+    public long missCount() { return missCount.get(); }
 }
