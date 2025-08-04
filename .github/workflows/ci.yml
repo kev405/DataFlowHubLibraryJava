@@ -4,6 +4,7 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -34,10 +35,11 @@ jobs:
 
       - name: Build & static analysis
         run: mvn -B clean verify
-        
-      - name: Upload reports
+
+      - name: Upload quality reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: quality-reports
           path: '**/target/quality-reports'
+          retention-days: 30
