@@ -456,3 +456,22 @@ String path = maybe.map(Report::getFilePath)
 
 ---
 
+## Serialización JSON ligera (HU F1-23)
+
+```java
+User u = …;
+String json = JsonSerializer.toJson(u);          // pretty-printed, null-safe
+User copy  = JsonSerializer.fromJson(json, User.class);
+assert u.equals(copy);
+```
+
+| Ventaja Gson core                                 | Limitación vs Jackson                          |
+| ------------------------------------------------- | ---------------------------------------------- |
+| ≈ 240 kB JAR, sin reflection module opener        | No soporta filtros, *mix-ins* o `@JsonView`    |
+| Tolerancia a campos desconocidos (forward-compat) | Sin autodetección de records en versiones < 17 |
+| Rendimiento suficiente (≈ 50 MB/s)                | Sin streaming “pull” de bajo nivel             |
+
+Regla adoptada: guardar JSON siempre en UTF-8, sin dependencias de Spring; los modelos evolucionan manteniendo compatibilidad porque los campos extra se ignoran.
+
+---
+
