@@ -72,6 +72,22 @@
             <release>${java.version}</release>
           </configuration>
         </plugin>
+        <!-- 1. Generar Javadoc (HTML 5, suprime doclint menores) -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>3.5.0</version>
+          <configuration>
+            <additionalJOption>-Xdoclint:none</additionalJOption>
+            <source>${java.version}</source>
+            <failOnError>true</failOnError>
+            <encoding>UTF-8</encoding>
+            <doclint>none</doclint>
+            <show>public</show>
+            <excludePackageNames>*.internal:*.bench</excludePackageNames>
+          </configuration>
+        </plugin>
+
         <!-- SpotBugs -->
         <plugin>
           <groupId>com.github.spotbugs</groupId>
@@ -229,4 +245,28 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <!-- Activa generación solo cuando se ejecute con -Pdocumentation -->
+    <profile>
+      <id>documentation</id>
+      <activation><activeByDefault>false</activeByDefault></activation>
+      <build>
+        <plugins>
+          <!-- Javadoc generación agregada -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>aggregate-javadoc</id>
+                <phase>verify</phase>
+                <goals><goal>aggregate</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
