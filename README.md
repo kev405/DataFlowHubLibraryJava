@@ -542,3 +542,8 @@ Los reportes HTML se generan en `target/quality-reports/index.html` para cada m�
 
 ---
 
+### 📚 API Javadoc  
+La documentación de la API pública (≥ 80 % cubierta) está disponible en  
+➡️ [docs/javadoc/index.html](docs/javadoc/index.html)
+
+---
