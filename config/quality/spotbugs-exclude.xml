@@ -1,0 +1,18 @@
+<FindBugsFilter>
+  <!-- Exclude JMH generated code -->
+  <Match>
+    <Class name="~.*jmh_generated.*"/>
+  </Match>
+  
+  <!-- Exclude JsonSerializer unused field issue -->
+  <Match>
+    <Class name="~.*JsonSerializer"/>
+    <Bug pattern="UUF_UNUSED_FIELD"/>
+  </Match>
+  
+  <!-- Exclude benchmark default encoding (acceptable for benchmarks) -->
+  <Match>
+    <Class name="~.*Bench.*"/>
+    <Bug pattern="DM_DEFAULT_ENCODING"/>
+  </Match>
+</FindBugsFilter>

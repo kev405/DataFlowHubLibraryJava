@@ -31,3 +31,13 @@ jobs:
           name: test-results
           path: '**/target/surefire-reports'
           retention-days: 30
+
+      - name: Build & static analysis
+        run: mvn -B clean verify
+        
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: quality-reports
+          path: '**/target/quality-reports'

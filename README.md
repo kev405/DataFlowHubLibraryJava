@@ -520,3 +520,25 @@ Manejo correcto de salto de línea (Windows/Linux) gracias a BufferedWriter.newL
 Charset configurable; por defecto usamos UTF-8 para compatibilidad.
 
 Lógica O(n) simple: dividir cadena + join. Para CSV complejo (citas, escapes) considerar OpenCSV / Univocity.
+
+---
+
+# Guía de Calidad
+
+Herramienta | Propósito | Severidad que rompe build
+------------|-----------|---------------------------
+**SpotBugs** | Detecta bugs potenciales (NPE, concurrencia) | `High` o superior
+**Checkstyle** | Consistencia de estilo (sangría, nombres) | `error`
+**PMD** | Code smells, complejidad, duplicados | `error`
+
+## Cómo suprimir un falso positivo
+
+1. SpotBugs: añade un bloque `<Match>` en `config/quality/spotbugs-exclude.xml`.
+2. PMD / Checkstyle: usa la anotación `@SuppressWarnings("PMD.RuleName")` o comentario `// CHECKSTYLE:OFF ... ON`.
+
+> **Regla**: justificar la supresión en el PR; no silenciar globalmente.
+
+Los reportes HTML se generan en `target/quality-reports/index.html` para cada módulo.
+
+---
+

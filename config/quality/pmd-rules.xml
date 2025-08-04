@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="DFH custom"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0
+                             http://pmd.sourceforge.net/ruleset_2_0_0.xsd">
+  <description>Reglas básicas para complejidad &amp; duplicados</description>
+  
+  <!-- Code Style Rules -->
+  <rule ref="category/java/codestyle.xml/UnnecessaryFullyQualifiedName"/>
+  
+  <!-- Best Practices Rules -->
+  <rule ref="category/java/bestpractices.xml/AvoidPrintStackTrace"/>
+  <!-- <rule ref="category/java/bestpractices.xml/SystemPrintln"/> -->
+  
+  <!-- Design Rules -->
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+      <properties>
+        <property name="methodReportLevel" value="15"/>
+      </properties>
+  </rule>
+  
+  <!-- Error Prone Rules -->
+  <rule ref="category/java/errorprone.xml/EmptyCatchBlock"/>
+  <rule ref="category/java/errorprone.xml/AvoidDuplicateLiterals">
+      <properties>
+        <property name="skipAnnotations" value="true"/>
+      </properties>
+  </rule>
+</ruleset>
