@@ -613,7 +613,7 @@ _Fase 1 establecida como base sólida; lista para escalar a integración, observ
 # DataFlowHubLibraryJava – Fase 2 (Épica B0)
 
 > **Boot Setup & Tooling**
-> **Estado**: ✅ F2-01 • ✅ F2-02 · ⏭️ Próxima: F2-03
+> **Estado**: ✅ F2-01 • ✅ F2-02 · ✅ F2-03
 
 Este documento resume los cambios y lineamientos aplicados en la **Fase 2** para preparar el andamiaje de Spring Boot y conectar la librería de la Fase 1 con un servicio API.
 
@@ -760,36 +760,146 @@ java -jar api-service/target/api-service-*.jar
 
 ---
 
-## 6) Troubleshooting
+# HU F2-03 – Perfiles `dev`, `test`, `prod`
 
-* **No se resuelve Spring Boot / versión vacía de starters**: verifica `spring.boot.version` en el POM padre y el import del BOM.
-* **`api-service` no encuentra `core`**: confirma la herencia de versión desde el padre y el orden `<modules>`; usa `mvn -pl api-service -am`.
-* **Fallo en tests de `lib` relacionados con condiciones de carrera**: esos tests demuestran comportamientos no thread-safe. Si tu implementación ya es segura, puedes aumentar concurrencia en el test para reproducir, crear una variante *fixed* con su test, o saltar pruebas temporalmente con `-DskipTests`.
+> **Objetivo**: definir configuración por ambiente en `api-service`, aislando datasources y niveles de log, y documentar cómo activar perfiles.
 
 ---
 
-## 7) Próximo: HU **F2-03 – Perfiles y configuración externa**
+## Archivos creados/actualizados
 
-* Crear perfiles `dev`, `test`, `prod` en `api-service` (`application-*.yml`).
-* Activación por `spring.profiles.active` y externalización de propiedades sensibles.
-* Validar arranque en cada perfil y health checks.
+* `api-service/src/main/resources/application.yml` *(base)*
+* `api-service/src/main/resources/application-dev.yml`
+* `api-service/src/main/resources/application-test.yml`
+* `api-service/src/main/resources/application-prod.yml`
+
+**Dependencias relevantes (en ********************`api-service/pom.xml`********************):** `spring-boot-starter-jdbc`, `com.h2database:h2` *(runtime)*, `org.postgresql:postgresql` *(runtime)*.
+**Tests** ejecutan con perfil `test` de forma automática (Surefire: `spring.profiles.active=test`).
 
 ---
 
-## 8) Referencias rápidas
+## Configuración base (`application.yml`)
 
-**Ramas sugeridas**
-
-* `feature/F2-02-import-core-lib`
-
-**Mensaje de commit sugerido**
-
+```yaml
+spring:
+  application:
+    name: api-service
+  profiles:
+    default: dev    # si no se especifica, arranca en dev
+server:
+  port: 8080
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 ```
-feat(B0): parent Boot + api-service e import de core-lib (F2-01,F2-02)
 
-- Estructura multi-módulo (parent + lib + core + api-service)
-- BOM y plugin de Spring Boot centralizados
-- api-service con Web/Actuator y scan cruzado
-- Import de core-lib y endpoint /ping
-- Test de integración de inyección
+---
+
+## Perfil `dev` (`application-dev.yml`)
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:mem:dataflow;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.practice: DEBUG
 ```
+
+## Perfil `test` (`application-test.yml`)
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+logging:
+  level:
+    root: WARN
+    org.springframework: WARN
+```
+
+## Perfil `prod` (`application-prod.yml`)
+
+```yaml
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://db:5432/dataflow}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+  file:
+    name: ${LOG_FILE:logs/api-service.log}
+```
+
+---
+
+## Cómo activar perfiles
+
+* **Por variable de entorno**
+
+  ```bash
+  # Linux/Mac
+  SPRING_PROFILES_ACTIVE=prod mvn -pl api-service spring-boot:run
+
+  # Windows PowerShell
+  $Env:SPRING_PROFILES_ACTIVE="prod"; mvn -pl api-service spring-boot:run
+  ```
+* **Por línea de comandos al ejecutar el JAR**
+
+  ```bash
+  java -Dspring.profiles.active=dev -jar api-service/target/api-service-*.jar
+  ```
+* **Tests**: el plugin Surefire fija `spring.profiles.active=test` (no requiere anotaciones en los tests).
+
+---
+
+## Verificación rápida
+
+```bash
+mvn clean install
+java -jar api-service/target/api-service-*.jar
+# En otra terminal
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/ping   # si está habilitado el endpoint de ejemplo
+```
+
+**Smoke test (resumen):** se valida que con `test` el `DataSource` sea H2 en memoria y que el nivel de log sea `WARN`.
+
+---
+
+## Criterios de aceptación
+
+* Cambiar perfil modifica datasource y nivel de log.
+* Tests se ejecutan con perfil `test` automáticamente (`@ActiveProfiles("test")`).
+* README sección “Perfiles” explica variables y ejemplos.
+
+---
+
