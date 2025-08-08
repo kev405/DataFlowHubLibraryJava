@@ -607,3 +607,189 @@ La documentación de la API pública (≥ 80 % cubierta) está disponible en
 ---
 
 _Fase 1 establecida como base sólida; lista para escalar a integración, observabilidad y optimización avanzada en la siguiente etapa._
+
+---
+
+# DataFlowHubLibraryJava – Fase 2 (Épica B0)
+
+> **Boot Setup & Tooling**
+> **Estado**: ✅ F2-01 • ✅ F2-02 · ⏭️ Próxima: F2-03
+
+Este documento resume los cambios y lineamientos aplicados en la **Fase 2** para preparar el andamiaje de Spring Boot y conectar la librería de la Fase 1 con un servicio API.
+
+---
+
+## 1) Estructura del repositorio (multi-módulo)
+
+```
+DataFlowHubLibraryJava/
+├─ pom.xml                    # POM padre (packaging = pom)
+├─ lib/                       # utilidades/demos (Fase 1)
+│  └─ pom.xml
+├─ core/                      # lógica reusable de dominio (Fase 1)
+│  └─ pom.xml
+└─ api-service/               # NUEVO: servicio REST Spring Boot 3
+   └─ pom.xml
+```
+
+**Claves del POM padre**
+
+* Propiedad centralizada `spring.boot.version`.
+* Import del **BOM** de Spring Boot en `<dependencyManagement>`.
+* Versión del **spring-boot-maven-plugin** fijada en `<pluginManagement>` para herencia en todos los módulos.
+
+---
+
+## 2) HU **F2-01 – Setup de Spring Boot**
+
+**Objetivo:** Inicializar un servicio web mínimo con Spring Boot 3 (Web + Actuator) que compile y arranque.
+
+**Entregables**
+
+* Módulo **`api-service`** creado.
+* Dependencias: `spring-boot-starter-web`, `spring-boot-starter-actuator`.
+* Configuración de versión de Boot mediante BOM en el POM padre.
+
+**Criterios de aceptación**
+
+* `mvn -pl api-service test` compila sin errores.
+* La aplicación arranca localmente.
+
+**Comandos**
+
+```bash
+mvn -pl api-service test
+mvn -pl api-service spring-boot:run
+```
+
+---
+
+## 3) HU **F2-02 – Importar `core-lib` como dependencia**
+
+**¿Qué se hizo?**
+
+1. Se importó el módulo **`core`** (librería de Fase 1) dentro de **`api-service`**:
+
+   ```xml
+   <dependency>
+     <groupId>com.practice</groupId>
+     <artifactId>core</artifactId>
+     <version>${project.version}</version>
+   </dependency>
+   ```
+2. Se habilitó *component scan* cruzado desde la app web para detectar beans del `core`:
+
+   ```java
+   @SpringBootApplication(scanBasePackages = "com.practice")
+   public class ApiServiceApplication { }
+   ```
+3. Se validó la inyección de un bean de la librería (ej. `ErrorHandler`) exponiendo un endpoint de prueba:
+
+   ```java
+   @RestController
+   @RequiredArgsConstructor
+   class HealthExtraController {
+     private final ErrorHandler errorHandler; // viene de core
+     @GetMapping("/ping") public String ping() { return "pong"; }
+   }
+   ```
+
+**Criterios de aceptación**
+
+* `mvn -pl api-service test` pasa sin errores.
+* `ErrorHandler` (u otro bean de `core`) se inyecta y funciona en un endpoint expuesto.
+
+**Probar rápidamente**
+
+```bash
+mvn clean install
+java -jar api-service/target/api-service-*.jar
+# En otra terminal
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/ping     # → "pong"
+```
+
+---
+
+## 4) Configuración Maven aplicada (resumen)
+
+**POM padre**
+
+* Define:
+
+    * `java.version`
+    * `spring.boot.version`
+* Importa el BOM de Spring Boot en `dependencyManagement`.
+* Fija `spring-boot-maven-plugin` en `pluginManagement` (heredado por los módulos).
+* Orden de módulos para un build determinista:
+
+  ```xml
+  <modules>
+    <module>lib</module>
+    <module>core</module>
+    <module>api-service</module>
+  </modules>
+  ```
+
+---
+
+## 5) Cómo compilar y ejecutar
+
+**Compilación completa**
+
+```bash
+mvn clean install
+```
+
+**Compilar solo `api-service` (con sus dependencias aguas arriba)**
+
+```bash
+mvn -pl api-service test -am
+```
+
+**Ejecutar**
+
+```bash
+java -jar api-service/target/api-service-*.jar
+```
+
+**Endpoints**
+
+* `GET /actuator/health`
+* `GET /ping`
+
+---
+
+## 6) Troubleshooting
+
+* **No se resuelve Spring Boot / versión vacía de starters**: verifica `spring.boot.version` en el POM padre y el import del BOM.
+* **`api-service` no encuentra `core`**: confirma la herencia de versión desde el padre y el orden `<modules>`; usa `mvn -pl api-service -am`.
+* **Fallo en tests de `lib` relacionados con condiciones de carrera**: esos tests demuestran comportamientos no thread-safe. Si tu implementación ya es segura, puedes aumentar concurrencia en el test para reproducir, crear una variante *fixed* con su test, o saltar pruebas temporalmente con `-DskipTests`.
+
+---
+
+## 7) Próximo: HU **F2-03 – Perfiles y configuración externa**
+
+* Crear perfiles `dev`, `test`, `prod` en `api-service` (`application-*.yml`).
+* Activación por `spring.profiles.active` y externalización de propiedades sensibles.
+* Validar arranque en cada perfil y health checks.
+
+---
+
+## 8) Referencias rápidas
+
+**Ramas sugeridas**
+
+* `feature/F2-02-import-core-lib`
+
+**Mensaje de commit sugerido**
+
+```
+feat(B0): parent Boot + api-service e import de core-lib (F2-01,F2-02)
+
+- Estructura multi-módulo (parent + lib + core + api-service)
+- BOM y plugin de Spring Boot centralizados
+- api-service con Web/Actuator y scan cruzado
+- Import de core-lib y endpoint /ping
+- Test de integración de inyección
+```
