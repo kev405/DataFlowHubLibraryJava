@@ -22,6 +22,26 @@ public record DataFile(
         User   uploadedBy         // user who performed the upload
 ) {
 
+    public static DataFile createForUpload(
+            String originalFilename,
+            String storagePath,
+            long sizeBytes,
+            String checksumSha256,
+            UUID uploadedByUserId
+    ) {
+        return new DataFile(
+                UUID.randomUUID(),
+                originalFilename,
+                storagePath,
+                sizeBytes,
+                checksumSha256,
+                Instant.now(),
+                User.ofId(uploadedByUserId) // ver helper abajo
+        );
+    }
+
+    public static final long MAX_SIZE_BYTES = 50L * 1024 * 1024;
+
     /** Validates business rules upon construction. */
     public DataFile {
         Objects.requireNonNull(id);
@@ -39,7 +59,7 @@ public record DataFile(
         if (sizeBytes <= 0)
             throw new IllegalArgumentException("sizeBytes must be > 0");
 
-        if (!checksumSha256.matches("^[0-9a-fA-F]{64}$"))
+        if (checksumSha256 != null && !checksumSha256.matches("^[0-9a-fA-F]{64}$"))
             throw new IllegalArgumentException(
                     "checksumSha256 must contain exactly 64 hexadecimal characters");
     }

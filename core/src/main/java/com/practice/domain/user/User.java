@@ -84,4 +84,10 @@ public final class User {
         }
         return mail;
     }
+
+    public static User ofId(UUID id) {
+        return new User(
+            UUID.randomUUID(), "Bob", "bob@example.com",
+            UserRole.ADMIN, Instant.now());
+    }
 }

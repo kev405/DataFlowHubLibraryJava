@@ -903,3 +903,138 @@ curl http://localhost:8080/ping   # si está habilitado el endpoint de ejemplo
 
 ---
 
+# B1 · HU F2-04 — Endpoint **POST /files** (simular upload de `DataFile`)
+
+> **Objetivo**: exponer un endpoint que **registre metadatos** de un archivo (NO guarda binarios), valide con **Bean Validation** y responda **201 Created** con `Location` y un DTO de salida.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../files/FileController.java`
+* `api-service/src/main/java/.../files/FileUploadRequest.java`
+* `api-service/src/main/java/.../files/FileUploadResponse.java`
+* `api-service/src/main/java/.../common/ApiErrorHandler.java`
+* `api-service/src/main/java/.../files/FileTooLargeException.java`
+* `api-service/src/test/java/.../files/FileControllerTest.java`
+
+**Dependencias** (en `api-service/pom.xml`)
+
+* `spring-boot-starter-validation` (activación de Bean Validation)
+
+---
+
+## Contrato del endpoint
+
+**Ruta:** `POST /files`
+
+**Request Body (JSON):**
+
+```json
+{
+  "originalFilename": "ventas_julio.csv",
+  "sizeBytes": 1048576,
+  "storagePath": "/data/in/ventas_julio.csv",
+  "checksumSha256": "9f2c...abcd", // OPCIONAL
+  "uploadedByUserId": "8d3b6c3f-64db-4c1e-9d51-3b6f3d8e2a11"
+}
+```
+
+**Validaciones (Bean Validation):**
+
+* `originalFilename` → `@NotBlank` y `@Size(max=255)`
+* `sizeBytes` → `@Positive` y **máx 50 MB** (`50 * 1024 * 1024`)
+* `checksumSha256` → **opcional**, regex `^[a-fA-F0-9]{64}$`
+* `storagePath` → `@NotBlank`
+* `uploadedByUserId` → `@NotNull` (UUID)
+
+**Response (201 Created):**
+
+* **Headers:** `Location: /files/{id}`
+* **Body:**
+
+```json
+{
+  "id": "4c16cf2a-9a11-4a9b-a1e5-0c7b2a7d1234",
+  "originalFilename": "ventas_julio.csv"
+}
+```
+
+**Errores (400 Bad Request):**
+
+* Cuerpo estándar: `{ "code": string, "message": string, "fields": [ {"field": string, "message": string} ] }`
+* Tamaño excedido ⇒ `code = "FILE_TOO_LARGE"`
+* Violaciones de Bean Validation ⇒ `code = "VALIDATION_ERROR"` con `fields[]`
+
+---
+
+## Mapeo al dominio
+
+* Se reutiliza el `DataFile` **existente** en `core/domain`.
+* Creación recomendada: **`DataFile.createForUpload(...)`** (fábrica en el dominio que genera `id`/`uploadedAt` y resuelve `uploadedBy` a partir de `uploadedByUserId`).
+* Si no existe la fábrica, puede instanciarse el `DataFile` directamente respetando las invariantes actuales del dominio.
+
+---
+
+## Ejemplo con `curl`
+
+```bash
+# Éxito (201)
+curl -i -X POST http://localhost:8080/files \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "originalFilename":"ventas_julio.csv",
+        "sizeBytes":1048576,
+        "storagePath":"/data/in/ventas_julio.csv",
+        "uploadedByUserId":"8d3b6c3f-64db-4c1e-9d51-3b6f3d8e2a11"
+      }'
+
+# Error (400 FILE_TOO_LARGE)
+curl -i -X POST http://localhost:8080/files \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "originalFilename":"big.bin",
+        "sizeBytes":52428801,
+        "storagePath":"/tmp/big.bin",
+        "uploadedByUserId":"8d3b6c3f-64db-4c1e-9d51-3b6f3d8e2a11"
+      }'
+
+# Error (400 VALIDATION_ERROR) por filename vacío + checksum inválido
+curl -i -X POST http://localhost:8080/files \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "originalFilename":" ",
+        "sizeBytes":100,
+        "checksumSha256":"XYZ",
+        "storagePath":"/data/in/a.csv",
+        "uploadedByUserId":"8d3b6c3f-64db-4c1e-9d51-3b6f3d8e2a11"
+      }'
+```
+
+---
+
+## Tests incluidos (`@WebMvcTest`)
+
+* **Happy path:** 201 + `Location` + body `{id, originalFilename}`.
+* **Tamaño > 50MB:** 400 con `code=FILE_TOO_LARGE`.
+* **Payload inválido:** 400 `VALIDATION_ERROR`, lista de `fields` con `originalFilename` y `checksumSha256`.
+
+> Los tests fuerzan la validación antes de llegar al dominio usando `@Valid` + `BindingResult`.
+
+---
+
+## Criterios de aceptación
+
+* 202 con Location válido al crear correctamente.
+* 400 con lista de errores de validación cuando falten campos.
+* `title` recorta espacios; longitud > 140 → 400.
+* Tests de mapeo DTO→dominio verifican campos obligatorios y opcionales.
+
+---
+
+## Notas
+
+* El almacenamiento real del binario **no se implementa** en esta HU; solo se registran metadatos.
+* En `prod` el comportamiento de logging y perfiles se hereda de la HU **F2-03**.
+
+---

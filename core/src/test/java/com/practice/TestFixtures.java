@@ -1,4 +1,4 @@
-package com;
+package com.practice;
 
 import com.practice.domain.batchconfig.BatchJobConfig;
 import com.practice.domain.datafile.DataFile;
