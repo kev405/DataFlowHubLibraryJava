@@ -11,11 +11,11 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
           cache: maven
 
       - name: Build, Test & Check coverage
-        run: ./mvnw -B clean jacoco:prepare-agent test jacoco:report jacoco:check -Dtest=!RaceDemoTest
+        run: ./mvnw -B clean jacoco:prepare-agent test jacoco:report jacoco:check
 
       - name: Publish coverage HTML
         if: always()

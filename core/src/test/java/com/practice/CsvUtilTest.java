@@ -1,4 +1,4 @@
-package com;
+package com.practice;
 
 import org.junit.jupiter.api.*;
 
