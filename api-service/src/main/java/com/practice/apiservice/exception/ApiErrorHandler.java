@@ -1,6 +1,7 @@
 package com.practice.apiservice.exception;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
@@ -10,8 +11,8 @@ import com.practice.apiservice.utils.error.FileTooLargeException;
 
 @RestControllerAdvice
 public class ApiErrorHandler {
-    record FieldItem(String field, String message) {}
-    record ApiError(String code, String message, List<FieldItem> fields) {}
+    public record FieldItem(String field, String message) {}
+    public record ApiError(String code, String message, List<FieldItem> fields) {}
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> onValidation(MethodArgumentNotValidException ex) {
@@ -19,7 +20,15 @@ public class ApiErrorHandler {
                 .map(fe -> new FieldItem(fe.getField(), fe.getDefaultMessage()))
                 .toList();
         return ResponseEntity.badRequest()
-                .body(new ApiError("VALIDATION_ERROR", "Payload inválido", fields));
+                .body(new ApiError("VALIDATION_ERROR", "Invalid payload", fields));
+    }
+
+    public static ResponseEntity<ApiError> badRequestFrom(BindingResult br) {
+        var fields = br.getFieldErrors().stream()
+                .map(fe -> new FieldItem(fe.getField(), fe.getDefaultMessage()))
+                .toList();
+        return ResponseEntity.badRequest()
+                .body(new ApiError("VALIDATION_ERROR", "Invalid payload", fields));
     }
 
     @ExceptionHandler(FileTooLargeException.class)

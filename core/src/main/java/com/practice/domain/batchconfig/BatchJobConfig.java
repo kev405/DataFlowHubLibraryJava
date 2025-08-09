@@ -25,7 +25,7 @@ public final class BatchJobConfig {
     private final boolean     active;
 
     /* ---------- ctor hidden behind Builder ---------- */
-    private BatchJobConfig(Builder b) {
+    public BatchJobConfig(Builder b) {
         this.id           = b.id;
         this.name         = b.name;
         this.description  = b.description;

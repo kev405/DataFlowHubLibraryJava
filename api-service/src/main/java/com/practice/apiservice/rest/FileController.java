@@ -5,8 +5,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import com.practice.apiservice.dto.FileUploadRequest;
-import com.practice.apiservice.dto.FileUploadResponse;
+import com.practice.apiservice.dto.file.FileUploadRequest;
+import com.practice.apiservice.dto.file.FileUploadResponse;
 import com.practice.apiservice.utils.error.FileTooLargeException;
 import com.practice.domain.datafile.DataFile;
 
