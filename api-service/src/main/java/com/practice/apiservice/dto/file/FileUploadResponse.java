@@ -1,4 +1,4 @@
-package com.practice.apiservice.dto;
+package com.practice.apiservice.dto.file;
 
 import java.util.UUID;
 

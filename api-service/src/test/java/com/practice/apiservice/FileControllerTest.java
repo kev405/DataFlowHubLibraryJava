@@ -1,7 +1,7 @@
 package com.practice.apiservice;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.practice.apiservice.dto.FileUploadRequest;
+import com.practice.apiservice.dto.file.FileUploadRequest;
 import com.practice.apiservice.rest.FileController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
