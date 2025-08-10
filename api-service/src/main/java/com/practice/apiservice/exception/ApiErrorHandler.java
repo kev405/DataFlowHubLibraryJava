@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import com.practice.apiservice.utils.error.FileTooLargeException;
+import com.practice.apiservice.utils.error.ResourceNotFoundException;
 
 @RestControllerAdvice
 public class ApiErrorHandler {
@@ -36,6 +37,12 @@ public class ApiErrorHandler {
         return ResponseEntity.badRequest()
                 .body(new ApiError("FILE_TOO_LARGE",
                         "Max " + ex.getMax() + " bytes, recibió " + ex.getActual(), List.of()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiError> onNotFound(com.practice.apiservice.utils.error.ResourceNotFoundException ex) {
+        return ResponseEntity.status(404)
+                .body(new ApiError("NOT_FOUND", ex.getMessage(), List.of()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
