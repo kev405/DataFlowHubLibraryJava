@@ -1289,3 +1289,171 @@ curl -i http://localhost:8080/processings/00000000-0000-0000-0000-000000000000
 
 ---
 
+# HU F2-07 — PostgreSQL + Flyway + Testcontainers
+
+> **Objetivo:** configurar PostgreSQL en **dev** y **tests** con migraciones **Flyway**. En tests se usa **Testcontainers** (PG real en Docker). No se modifica `core` ni `lib`.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/pom.xml` → dependencias JPA, PostgreSQL, Flyway y Testcontainers
+* `api-service/src/main/resources/application-dev.yml` → datasource PostgreSQL (por variables de entorno)
+* `api-service/src/main/resources/application-test.yml` → sin datasource; JPA/Flyway mínimos para Testcontainers
+* `api-service/src/test/java/.../db/DbSmokeTest.java` → prueba de arranque y conexión a BD
+* *(opcional)* `api-service/docker-compose.yml` → servicio PostgreSQL local para desarrollo
+* *(opcional)* `src/main/resources/db/migration/*.sql` → scripts de Flyway
+
+**Dependencias añadidas (POM ********`api-service`********):**
+
+* `spring-boot-starter-data-jpa`
+* `org.postgresql:postgresql` *(runtime)*
+* `org.flywaydb:flyway-core`
+* `org.flywaydb:flyway-database-postgresql` *(requerido para PG 16+)*
+* `org.testcontainers:junit-jupiter` *(test)*
+* `org.testcontainers:postgresql` *(test)*
+
+> Si tu BOM de Spring Boot no trae Flyway 10, fija `flyway.version` a **10.x** o usa Testcontainers con `postgres:15-alpine` (ver más abajo).
+
+---
+
+## Configuración por perfil
+
+### `application-dev.yml` (PostgreSQL por variables de entorno)
+
+```yaml
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/dataflow}
+    username: ${DB_USER:app}
+    password: ${DB_PASSWORD:secret}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+```
+
+### `application-test.yml` (para Testcontainers)
+
+```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+```
+
+> **No** declares `spring.datasource.*` aquí: Testcontainers inyecta URL/usuario/clave automáticamente.
+
+---
+
+## Test de humo con Testcontainers
+
+```java
+@Testcontainers
+@SpringBootTest
+class DbSmokeTest {
+  @Container
+  @ServiceConnection // Spring Boot 3.1+: autoconfigura el DataSource desde el contenedor
+  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+
+  // Fallback si tu Boot < 3.1
+  @DynamicPropertySource
+  static void pgProps(DynamicPropertyRegistry r) {
+    r.add("spring.datasource.url", postgres::getJdbcUrl);
+    r.add("spring.datasource.username", postgres::getUsername);
+    r.add("spring.datasource.password", postgres::getPassword);
+  }
+
+  @Autowired javax.sql.DataSource ds;
+
+  @Test void contextLoads_andDatabaseIsReachable() throws Exception {
+    try (var c = ds.getConnection()) { assert c.isValid(2); }
+  }
+}
+```
+
+**Nota Flyway:** Para PostgreSQL 16, agrega `flyway-database-postgresql`. Si usas Flyway < 10, cambia el contenedor a `postgres:15-alpine`.
+
+---
+
+## Ejecución en desarrollo (dev)
+
+### Linux/Mac
+
+```bash
+export DB_URL=jdbc:postgresql://localhost:5432/dataflow
+export DB_USER=app
+export DB_PASSWORD=secret
+export SPRING_PROFILES_ACTIVE=dev
+mvn -pl api-service spring-boot:run
+```
+
+### Windows PowerShell
+
+```powershell
+$Env:DB_URL = "jdbc:postgresql://localhost:5432/dataflow"
+$Env:DB_USER = "app"
+$Env:DB_PASSWORD = "secret"
+$Env:SPRING_PROFILES_ACTIVE = "dev"
+mvn -pl api-service spring-boot:run
+```
+
+*(Opcional)* levanta PostgreSQL con Docker:
+
+```yaml
+# api-service/docker-compose.yml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dataflow
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+volumes:
+  pgdata:
+```
+
+---
+
+## Migraciones Flyway
+
+* Coloca scripts en `src/main/resources/db/migration` con prefijos `V1__*.sql`, `V2__*.sql`, etc.
+* `baseline-on-migrate: true` permite inicializar una BD vacía sin errores.
+
+---
+
+## CI (GitHub Actions)
+
+```yaml
+- uses: actions/checkout@v4
+- uses: actions/setup-java@v4
+  with:
+    distribution: temurin
+    java-version: '17'   # o 21 si tu POM lo requiere
+    cache: maven
+- run: mvn -B -DskipTests=false clean verify
+```
+
+> Testcontainers usa Docker del runner automáticamente; no requieres servicios extra.
+
+---
+
+## Criterios de aceptación
+
+* La app arranca en `dev` y ejecuta migraciones Flyway sin errores.
+* En `test`, el contexto usa Postgres de Testcontainers automáticamente.
+* Logs muestran zona horaria **UTC** y `ddl-auto=validate`.
+
+
+---
+
