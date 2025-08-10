@@ -1038,3 +1038,254 @@ curl -i -X POST http://localhost:8080/files \
 * En `prod` el comportamiento de logging y perfiles se hereda de la HU **F2-03**.
 
 ---
+
+# HU F2-05 — Endpoint **POST /processings** (ACK 202)
+
+> **Objetivo:** aceptar la solicitud de procesamiento y devolver un **acuse (ACK)** con `status=PENDING`, sin instanciar aún el agregado de dominio ni persistir. La validación de existencia de `DataFile`, `User` y `BatchJobConfig` se realizará en la siguiente HU/épica.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../processings/ProcessingController.java`
+* `api-service/src/main/java/.../processings/dto/CreateProcessingRequest.java`
+* `api-service/src/main/java/.../processings/dto/ProcessingCreatedResponse.java`
+* `api-service/src/main/java/.../config/AppBatchProps.java`
+* `api-service/src/test/java/.../processings/ProcessingControllerTest.java`
+* `api-service/src/main/resources/application.yml` → propiedad `app.batch.default-config-id`
+
+**Notas**
+
+* Se reutiliza el `ApiErrorHandler` existente (`badRequestFrom(BindingResult)`) para responder **400 VALIDATION\_ERROR**.
+* No se construyen objetos de dominio (`ProcessingRequest`, `DataFile`, `User`, `BatchJobConfig`) en esta HU.
+
+---
+
+## Contrato del endpoint
+
+**Ruta:** `POST /processings`
+
+**Request Body (JSON):**
+
+```json
+{
+  "title": "ETL Ventas Julio",
+  "dataFileId": "e4b7b32e-f93b-47b1-8a5d-6a0c3c8f1b0b",
+  "requestedByUserId": "1b2b4d6e-9fa1-4f0f-8b12-33d4c9a0e111",
+  "batchJobConfigId": "00000000-0000-0000-0000-000000000001", // OPCIONAL
+  "parameters": { "delimiter": ";" }                          // OPCIONAL
+}
+```
+
+**Validaciones:**
+
+* `title` → se aplica `trim()` y luego se exige longitud **1..140**. (El DTO puede permitir hasta 400 para entrada, pero el controller recorta y valida el límite efectivo.)
+* `dataFileId` → requerido (UUID)
+* `requestedByUserId` → requerido (UUID)
+* `batchJobConfigId` → **opcional**; si no llega se usa `app.batch.default-config-id`
+* `parameters` → opcional; si viene, `Map<@NotBlank String, @NotBlank String>`
+
+**Response (202 Accepted):**
+
+* **Headers:** `Location: /processings/{id}`
+* **Body:**
+
+```json
+{ "id": "4c16cf2a-9a11-4a9b-a1e5-0c7b2a7d1234", "status": "PENDING" }
+```
+
+**Errores (400 Bad Request):**
+
+* Cuerpo estándar: `{ "code": "VALIDATION_ERROR", "message": "Invalid payload", "fields": [ {"field": "...", "message": "..."} ] }`
+* Casos cubiertos: `title` vacío tras `trim`, `title` > 140, `dataFileId`/`requestedByUserId` nulos, claves/valores inválidos en `parameters`.
+
+---
+
+## Configuración
+
+`application.yml` (o `application-dev.yml`):
+
+```yaml
+app:
+  batch:
+    default-config-id: "00000000-0000-0000-0000-000000000001"
+```
+
+Habilitar properties:
+
+```java
+@EnableConfigurationProperties(AppBatchProps.class)
+```
+
+---
+
+## Ejemplos con `curl`
+
+```bash
+# Éxito (202)
+curl -i -X POST http://localhost:8080/processings \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "title":"  ETL Ventas Julio  ",
+        "dataFileId":"e4b7b32e-f93b-47b1-8a5d-6a0c3c8f1b0b",
+        "requestedByUserId":"1b2b4d6e-9fa1-4f0f-8b12-33d4c9a0e111",
+        "parameters": {"delimiter":";"}
+      }'
+
+# Error (400 VALIDATION_ERROR) por título inválido
+d='{"title":"   ","dataFileId":"'$(uuidgen)'","requestedByUserId":"'$(uuidgen)'"}'
+curl -i -X POST http://localhost:8080/processings -H 'Content-Type: application/json' -d "$d"
+```
+
+---
+
+## Tests (`@WebMvcTest`)
+
+* **Happy path:** 202 + `Location` + body `{id, "PENDING"}`.
+* **Uso de default:** cuando `batchJobConfigId` no viene, se lee `app.batch.default-config-id`.
+* **Validación:** `title` (trim y longitud) y requeridos → 400 `VALIDATION_ERROR` con `fields`.
+
+---
+
+## Criterios de aceptación
+
+* 202 con Location válido al crear correctamente.
+* 400 con lista de errores de validación cuando falten campos.
+* `title` recorta espacios; longitud > 140 → 400.
+* Tests de mapeo DTO→dominio verifican campos obligatorios y opcionales.
+
+---
+
+## Notas
+
+* Esta HU no verifica la existencia de DataFile, User ni BatchJobConfig; tampoco instancia ProcessingRequest. Ese wiring (lookups/repos) se aborda en la siguiente HU/épica.
+
+---
+
+# HU F2-06 — Endpoint **GET /processings/{id}** (estado + métricas)
+
+> **Objetivo:** exponer el estado de un *processing* combinando el **`ProcessingRequest`** y su \*\*última \*\***`JobExecution`** (si existe). Devuelve un DTO estable para el front y 404 si el id no existe.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../processings/ProcessingQueryController.java`
+* `api-service/src/main/java/.../processings/dto/ProcessingStatusResponse.java`
+* `api-service/src/main/java/.../processings/query/ProcessingStatusFinder.java` *(puerto de lectura)*
+* `api-service/src/main/java/.../processings/query/InMemoryProcessingStatusFinder.java` *(adaptador in-memory)*
+* `api-service/src/main/java/.../utils/error/ResourceNotFoundException.java` *(404)*
+* `api-service/src/test/java/.../processings/ProcessingQueryControllerTest.java`
+* *(opcional demo)* `api-service/src/main/java/.../config/DemoData.java` para “sembrar” un registro al arrancar.
+
+**Dependencias:** se reutilizan las de `api-service`. No se modifican `core` ni `lib`.
+
+---
+
+## Contrato del endpoint
+
+**Ruta:** `GET /processings/{id}`
+
+**Response 200 (JSON):**
+
+```json
+{
+  "id": "7e2a1d7c-39bb-4f1a-8a55-9a2f14c47788",
+  "title": "ETL Ventas Julio",
+  "status": "RUNNING",
+  "createdAt": "2025-08-07T03:10:21Z",
+  "dataFileId": "4c16cf2a-9a11-4a9b-a1e5-0c7b2a7d1234",
+  "metrics": { "readCount": 12345, "writeCount": 12280, "skipCount": 145 },
+  "lastExecution": {
+    "startTime": "2025-08-07T03:10:22Z",
+    "endTime": null,
+    "exitStatus": null,
+    "errorMessage": null
+  }
+}
+```
+
+**Response 404:**
+
+```json
+{ "code": "NOT_FOUND", "message": "processing id not found", "fields": [] }
+```
+
+**Notas de serialización:**
+
+* Tiempos (`Instant`) en formato **ISO‑8601 UTC** (`Z`).
+* `lastExecution` es **`null`** si nunca se ha ejecutado.
+* Si existe al menos una ejecución, `metrics` refleja la última (`read/write/skip`).
+
+---
+
+## DTO de salida
+
+```java
+public record ProcessingStatusResponse(
+    UUID id,
+    String title,
+    String status,          // RequestStatus del dominio → String
+    Instant createdAt,
+    UUID dataFileId,
+    Metrics metrics,
+    LastExecution lastExecution
+) {
+  public record Metrics(long readCount, long writeCount, long skipCount) {}
+  public record LastExecution(Instant startTime, Instant endTime, String exitStatus, String errorMessage) {}
+}
+```
+
+---
+
+## Fuente de datos (read model)
+
+* Se usa el puerto **`ProcessingStatusFinder`** que expone:
+
+    * `findRequest(UUID id)` → `Optional<ProcessingRequest>`
+    * `findLastExecution(UUID processingId)` → `Optional<JobExecution>`
+* Implementación por defecto: `InMemoryProcessingStatusFinder` (mapas concurrentes) para permitir tests y demos sin persistencia.
+* **Mapeo a DTO:**
+
+    * `id`, `title`, `status`, `createdAt` y `dataFileId` vienen de `ProcessingRequest`.
+    * Si hay última `JobExecution`: rellena `metrics` y `lastExecution` (con `exitStatus.name()`), si no, `metrics` = `0/0/0` y `lastExecution=null`.
+
+---
+
+## Ejemplos con `curl`
+
+```bash
+# Existe y está corriendo (200)
+curl -s http://localhost:8080/processings/7e2a1d7c-39bb-4f1a-8a55-9a2f14c47788 | jq
+
+# No existe (404)
+curl -i http://localhost:8080/processings/00000000-0000-0000-0000-000000000000
+```
+
+---
+
+## Tests (`@WebMvcTest`)
+
+* **200 sin ejecución:** `lastExecution` no presente y `metrics` en `0`.
+* **200 con ejecución:** `status` y métricas correctas; `lastExecution.startTime` en ISO‑8601.
+* **404 inexistente:** error con `code=NOT_FOUND`.
+
+> En los tests se **mockea** `ProcessingStatusFinder` y se construyen objetos de dominio reales (`ProcessingRequest`, `JobExecution`) para validar el mapeo.
+
+---
+
+## 4. Criterios de aceptación
+
+* 200 con DTO completo; 404 cuando `id` no existe.
+* No exponer stacktraces; errores van por `RestExceptionHandler` (B3).
+* Campos de fecha en **ISO‑8601 UTC**.
+* Tests cubren los tres escenarios.
+
+---
+
+## Notas
+
+* Este read-model es **in-memory** y sirve como contrato estable. En épicas B5/B6 se conectará con **Spring Batch/Actuator** para poblar las ejecuciones reales y métricas.
+
+---
+
