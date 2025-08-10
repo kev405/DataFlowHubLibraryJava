@@ -1,14 +1,22 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:dataflow;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-  h2:
-    console:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/dataflow}
+    username: ${DB_USER:app}
+    password: ${DB_PASSWORD:secret}
+    driver-class-name: org.postgresql.Driver
+    jpa:
+      hibernate:
+        ddl-auto: validate
+      properties:
+        hibernate.jdbc.time_zone: UTC
+        hibernate.format_sql: false
+    flyway:
       enabled: true
+      locations: classpath:db/migration
+      baseline-on-migrate: true
 
 logging:
   level:
     root: INFO
-    com.practice: DEBUG   # más verboso en dev
+    com.practice: DEBUG
+    org.hibernate.SQL: WARN
