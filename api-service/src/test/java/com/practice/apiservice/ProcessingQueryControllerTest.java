@@ -1,6 +1,6 @@
 package com.practice.apiservice;
 
-import com.practice.apiservice.exception.ApiErrorHandler;
+import com.practice.apiservice.exception.RestExceptionHandler;
 import com.practice.apiservice.repository.irepository.ProcessingStatusFinder;
 import com.practice.apiservice.rest.ProcessingQueryController;
 import com.practice.domain.batchconfig.BatchJobConfig;
@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = ProcessingQueryController.class)
-@Import(ApiErrorHandler.class)
+@Import(RestExceptionHandler.class)
 class ProcessingQueryControllerTest {
 
     @Autowired MockMvc mvc;

@@ -3,7 +3,7 @@ package com.practice.apiservice.rest;
 import com.practice.apiservice.config.AppBatchProps;
 import com.practice.apiservice.dto.processing.CreateProcessingRequest;
 import com.practice.apiservice.dto.processing.ProcessingCreatedResponse;
-import com.practice.apiservice.exception.ApiErrorHandler;
+import com.practice.apiservice.exception.RestExceptionHandler;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
@@ -25,7 +25,7 @@ public class ProcessingController {
         var title = r.title().trim();
         if (title.isEmpty())         br.rejectValue("title", "NotBlank", "must not be blank");
         else if (title.length() > 140) br.rejectValue("title", "Size", "length must be <= 140 after trimming");
-        if (br.hasErrors()) return ApiErrorHandler.badRequestFrom(br);
+        if (br.hasErrors()) return RestExceptionHandler.badRequestFrom(br);
 
         UUID effectiveCfgId = Optional.ofNullable(r.batchJobConfigId()).orElseGet(props::defaultConfigId);
 
