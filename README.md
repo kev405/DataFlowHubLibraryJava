@@ -1941,3 +1941,138 @@ mvn test -Dtest=SecurityIntegrationTest
 * Las contraseñas se almacenan usando `BCryptPasswordEncoder`.
 * La configuración está definida en `SecurityConfig` y aplica tanto a entornos de producción como de prueba.
 * En los tests de integración se usan códigos de estado **404** o **400** para confirmar que la autenticación pasó, aunque la lógica de negocio no encuentre el recurso o el body sea inválido.
+
+---
+
+# Seguridad — Comparativa Basic vs JWT (Bearer)
+
+> **Objetivo:** documentar ventajas y desventajas de **Basic Auth** y **JWT (Bearer)** en la API, y proponer una **estrategia de migración** para fases siguientes.
+
+---
+
+## Archivos creados/actualizados
+
+* `docs/security-authn.md` *(este documento)*
+* (Opcional PoC) `api-service/src/main/resources/application-jwt.yml` *(perfil de pruebas para resource server JWT)*
+
+**Dependencias (PoC JWT):** `spring-boot-starter-oauth2-resource-server`.
+
+---
+
+## Resumen ejecutivo
+
+* **Fase actual (F2):** **Basic Auth** — simple, rápido para equipos internos y pruebas.
+* **Fase siguiente (F3+):** **JWT (Bearer)** — mejor para microservicios, propagación entre servicios y escalabilidad.
+
+---
+
+## Comparativa por ejes
+
+| Eje                     | Basic Auth                                                               | JWT (Bearer)                                                            |
+| ----------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| **Estado**              | Envía credenciales en **cada** request.                                  | Token firmado, **stateless**, con expiración.                           |
+| **Rotación/Revocación** | Cambiar contraseña del usuario.                                          | Compleja: listas negras, tokens **short‑lived**, **refresh tokens**.    |
+| **Tamaño/latencia**     | Ligero, pero puede requerir lookups (si hay user service).               | Token más pesado (claims), evita lookups por request.                   |
+| **Microservicios**      | Cada salto debe revalidar credenciales.                                  | Facilita propagación entre servicios con el mismo token.                |
+| **Seguridad**           | Requiere **HTTPS**; credenciales sensibles en tránsito con cada request. | **HTTPS** + gestión de llaves (**JWK/Issuer**) y relojes sincronizados. |
+| **CSRF**                | Puede requerir protección si se usa desde navegador.                     | APIs stateless con Bearer suelen quedar fuera de riesgo de CSRF.        |
+| **Observabilidad**      | Sin claims; menos contexto.                                              | Claims (sub, scope, roles, tenant) mejoran trazabilidad.                |
+| **Operación**           | Sin gestión de llaves.                                                   | Gestión de **JWKS**, rotación de firmas, reloj del cluster.             |
+
+---
+
+## Recomendación
+
+1. **Mantener Basic Auth en F2** (interno + pruebas) por rapidez y menor superficie de cambio.
+2. **Planificar migración a JWT en F3+** usando `spring-boot-starter-oauth2-resource-server` con validación de tokens desde un **Issuer** (Keycloak/Okta/issuer propio).
+
+    * Tokens **cortos** (5–15 min).
+    * Rotación de llaves (JWKS).
+    * Scopes/roles en claims según dominios de negocio.
+
+---
+
+## Lineamientos de diseño para migrar a JWT
+
+* **Boundary de seguridad**: validar el token en el **edge** (API gateway o cada microservicio) y propagar solo claims necesarios.
+* **Autorización**: usar anotaciones (`@PreAuthorize`) basadas en authorities/scopes extraídos del token, o reglas en filtros.
+* **Clock skew**: configurar tolerancia (±60s).
+* **Errores**: mapear 401 por token inválido/expirado y 403 por falta de scopes/roles.
+
+---
+
+## PoC opcional (resource server)
+
+### Encabezado Bearer
+
+```http
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### `application-jwt.yml` (perfil de prueba)
+
+```yaml
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Elige uno de los dos enfoques
+          # 1) Validación por Issuer (OpenID Connect/Keycloak/Okta)
+          issuer-uri: http://localhost:9000/realms/dataflow
+          # 2) Validación por clave pública (RSA) local
+          # jwk-set-uri: http://localhost:9000/realms/dataflow/protocol/openid-connect/certs
+
+# Activar este perfil solo en el PoC para no interferir con Basic
+spring:
+  profiles:
+    active: jwt
+```
+
+### Dependencia (PoC)
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+</dependency>
+```
+
+### Config mínima Java (si no usas autoconfig por perfil)
+
+```java
+@Bean
+SecurityFilterChain jwtFilterChain(HttpSecurity http) throws Exception {
+  http
+    .authorizeHttpRequests(a -> a
+      .requestMatchers("/actuator/health", "/ping").permitAll()
+      .anyRequest().authenticated())
+    .oauth2ResourceServer(o -> o.jwt());
+  return http.build();
+}
+```
+
+### Tests sugeridos (PoC)
+
+* **200** con token válido (firma OK y no expirado).
+* **401** con token sin firma válida o expirado.
+* **403** con token válido pero sin el scope/rol requerido.
+
+---
+
+## Criterios de aceptación
+
+* Documento `docs/security-authn.md` con **tabla comparativa** y **recomendación clara** (Basic ahora, JWT luego).
+* *(Si se realiza PoC)* existe `application-jwt.yml` y un test que demuestra **200** con token válido y **401** con token inválido.
+* Configuración separada por **perfil** para no interferir con Basic en `dev`.
+
+---
+
+## Notas
+
+* Para producción, planificar **rotación de llaves**, tiempos de expiración cortos y estrategia de **refresh tokens** (si aplica a clientes de confianza).
+* Considerar un **Issuer** central (Keycloak/Okta/Cognito) para estandarizar *claims*, *scopes* y rotación de llaves.
+* La migración debe ser **compatible**: convivir temporalmente **Basic** (interno) y **JWT** (clientes externos) detrás de paths o perfiles distintos.
+* Documentar *error codes* de autenticación/autorización para los clientes (401 vs 403).
+
+---
