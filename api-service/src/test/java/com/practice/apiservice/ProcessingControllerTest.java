@@ -8,6 +8,7 @@ import com.practice.apiservice.rest.ProcessingController;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -22,21 +23,22 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = ProcessingController.class)
-@Import(RestExceptionHandler.class) // 👈 asegura que el handler esté activo
+@Import(RestExceptionHandler.class)
+@AutoConfigureMockMvc(addFilters = false)
 class ProcessingControllerTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
 
-    @MockBean AppBatchProps props; // 👈 lo mockeamos para controlar el default
+    @MockBean AppBatchProps props;
 
     @Test
     void accepted202_withLocation_andBody() throws Exception {
         var req = new CreateProcessingRequest(
-                "  ETL Ventas Julio  ",              // probar trimming
+                "  ETL Ventas Julio  ",
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                null,                                 // fuerza uso del default
+                null,
                 Map.of("delimiter", ";")
         );
 
@@ -46,12 +48,11 @@ class ProcessingControllerTest {
         mvc.perform(post("/processings")
                         .contentType(APPLICATION_JSON)
                         .content(json.writeValueAsBytes(req)))
-                .andExpect(status().isAccepted())                         // 202
+                .andExpect(status().isAccepted())
                 .andExpect(header().string("Location", startsWith("/processings/")))
                 .andExpect(jsonPath("$.id", notNullValue()))
                 .andExpect(jsonPath("$.status", is("PENDING")));
 
-        // opcional: verifica que se pidió el default al ser null
         Mockito.verify(props).defaultConfigId();
     }
 
@@ -75,7 +76,6 @@ class ProcessingControllerTest {
 
     @Test
     void rejects_when_title_trimmed_is_blank_or_length_gt_140() throws Exception {
-        // título solo espacios -> debe fallar por trim
         var bad1 = """
       { "title":"   ", "dataFileId":"%s", "requestedByUserId":"%s" }
       """.formatted(UUID.randomUUID(), UUID.randomUUID());
@@ -87,7 +87,6 @@ class ProcessingControllerTest {
                 .andExpect(jsonPath("$.code", is("VALIDATION_ERROR")))
                 .andExpect(jsonPath("$.fields[*].field", hasItem("title")));
 
-        // título > 140 luego de trim
         var longTitle = " " + "A".repeat(141) + " ";
         var bad2 = new CreateProcessingRequest(
                 longTitle, UUID.randomUUID(), UUID.randomUUID(), null, null

@@ -1886,3 +1886,58 @@ Casos cubiertos en `RestExceptionHandlerTest`:
 
 ---
 
+## F2-12 — Pruebas de integración de seguridad
+
+> **Objetivo:** verificar la configuración de seguridad de la API mediante pruebas de integración con usuarios en memoria y autenticación básica.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/test/java/.../SecurityIntegrationTest.java` *(nuevo test de integración)*
+* `api-service/src/main/java/.../config/SecurityConfig.java` *(configuración de seguridad con usuarios en memoria y reglas de autorización)*
+
+**Dependencias:** se utilizan las de `api-service` junto con H2 en memoria y `spring-security-test` para soporte de `MockMvc` con autenticación.
+
+---
+
+## Comportamiento probado
+
+* Endpoints públicos (por ejemplo, `/ping`, `/actuator/health`) accesibles sin autenticación → **200 OK**.
+* Endpoints protegidos requieren credenciales válidas → **401 Unauthorized** sin autenticación.
+* Control de acceso por rol funciona correctamente (por ejemplo, endpoints solo para ADMIN → **403 Forbidden** para usuarios USER).
+* Autenticación exitosa pero recurso inexistente → **404 Not Found**.
+* Autenticación exitosa pero petición inválida → **400 Bad Request**.
+
+---
+
+## Implementación de pruebas
+
+* **Frameworks**: `SpringBootTest`, `MockMvc`, `JUnit 5`.
+* **Autenticación**: HTTP Basic con usuarios en memoria (`user` / `user123`, `admin` / `admin123`).
+* **Base de datos**: H2 en memoria configurada para el perfil de pruebas, Flyway deshabilitado para acelerar la ejecución.
+
+---
+
+## Ejecución de las pruebas
+
+```bash
+mvn test -Dtest=SecurityIntegrationTest
+```
+
+---
+
+## Criterios de aceptación
+
+* `/actuator/health` responde **200** sin auth; `/processings/**` devuelve **401** sin credenciales.
+* Con `user/user123` se accede a `GET /processings/{id}`; con `admin/admin123` se accede además a endpoints `ADMIN` si los hay.
+* Tests de seguridad cubren: 401, 403 y acceso válido.
+
+---
+
+## Notas
+
+* Para desarrollo local, CORS está habilitado para `http://localhost:3000`.
+* Las contraseñas se almacenan usando `BCryptPasswordEncoder`.
+* La configuración está definida en `SecurityConfig` y aplica tanto a entornos de producción como de prueba.
+* En los tests de integración se usan códigos de estado **404** o **400** para confirmar que la autenticación pasó, aunque la lógica de negocio no encuentre el recurso o el body sea inválido.

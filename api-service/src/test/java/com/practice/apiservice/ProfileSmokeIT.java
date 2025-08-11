@@ -11,6 +11,7 @@ import org.springframework.core.env.Environment;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {
+                "spring.main.web-application-type=none",
                 "spring.flyway.enabled=false",
                 "spring.jpa.hibernate.ddl-auto=none"
         })
