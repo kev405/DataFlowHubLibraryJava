@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "processing_requests")
@@ -35,8 +37,8 @@ public class ProcessingRequestEntity {
     @JoinColumn(name="data_file_id", columnDefinition = "uuid")
     private DataFileEntity dataFile;
 
-    @Convert(converter = MapToJsonConverter.class)
-    @Column(columnDefinition = "text", nullable=false)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable=false)
     private Map<String,String> parameters;
 
     @Enumerated(EnumType.STRING) @Column(nullable=false)

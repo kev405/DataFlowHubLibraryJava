@@ -1593,3 +1593,187 @@ assertThat(last.getStartTime()).isEqualTo(t2).isAfter(t1).isAfter(t3);
 * En B2-09 se introducirá **Flyway** para el esquema; por ahora los tests generan tablas con Hibernate (`create-drop`).
 
 ---
+
+# F2-09 — Flyway baseline + JSONB y correcciones de test
+
+> **Objetivo:** crear el **esquema inicial** con **Flyway**, mapear `JSONB` correctamente (sin acoplar `core`) y asegurar que los tests no ejecuten SQL de PostgreSQL en H2.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/resources/db/migration/postgresql/V1__baseline.sql` *(migración base vendorizada)*
+* `api-service/src/main/resources/db/migration/postgresql/V2__alter_checksum_to_varchar.sql` *(ajuste de tipos)*
+* `api-service/src/main/resources/application-test.yml` *(Flyway + validate, sin datasource)*
+* **Entidades (ajustes)** en `api-service`:
+
+    * `ProcessingRequestEntity.parameters` → `@JdbcTypeCode(SqlTypes.JSON)` + `columnDefinition = "jsonb"`
+    * `UserEntity.role` → `@Enumerated(EnumType.STRING)`; `createdAt` con `@PrePersist` para default
+* **Tests**: desactivar Flyway solo en smokes que no usan BD o vendorizar migraciones
+
+---
+
+## Esquema con Flyway (PostgreSQL)
+
+**`V1__baseline.sql`** (ubicación: `db/migration/postgresql/`):
+
+* Extensiones/Tipos Postgres
+* Tablas y claves foráneas:
+
+    * `users (id uuid PK, name varchar(140), email varchar(140) UNIQUE NOT NULL, role varchar(32) NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`
+    * `data_files` (`checksum_sha256 varchar(64)`, etc.)
+    * `batch_job_configs`
+    * `processing_requests (parameters jsonb NOT NULL DEFAULT '{}'::jsonb)`
+    * `job_executions`
+    * `reports`
+* Índices:
+
+    * `idx_pr_status_created (status, created_at DESC)`
+    * `idx_je_pr_start_desc (processing_request_id, start_time DESC)`
+
+**`V2__alter_checksum_to_varchar.sql`**:
+
+```sql
+ALTER TABLE data_files
+  ALTER COLUMN checksum_sha256 TYPE varchar(64);
+```
+
+> **Nota ****`users`****:** se actualizó para reflejar tu `UserEntity` (`email` único, `role`, `created_at`).
+
+---
+
+## JSONB sin converter (Hibernate 6)
+
+En `ProcessingRequestEntity`:
+
+```java
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+@JdbcTypeCode(SqlTypes.JSON)
+@Column(columnDefinition = "jsonb", nullable = false)
+private Map<String, String> parameters;
+```
+
+> El campo `parameters` se persiste como **jsonb** nativo; no hace falta `AttributeConverter` ni `PGobject`.
+
+---
+
+## Configuración por perfil
+
+**`application-test.yml`** (tests con Testcontainers + Flyway):
+
+```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/{vendor}
+    baseline-on-migrate: false
+  sql:
+    init:
+      mode: never
+logging:
+  level:
+    root: WARN
+    org.springframework: WARN
+    org.flywaydb: INFO
+```
+
+**`application-dev.yml`** (resumen):
+
+```yaml
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/dataflow}
+    username: ${DB_USER:app}
+    password: ${DB_PASSWORD:secret}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/{vendor}
+    baseline-on-migrate: true
+```
+
+> Usar `{vendor}` permite que Flyway cargue `postgresql/` con Postgres y (si lo necesitas) `h2/` con H2.
+
+---
+
+## Estrategia de tests
+
+* **Integración JPA/Repos:**
+
+    * `@DataJpaTest` + Testcontainers (PostgreSQL 16) con Flyway habilitado (`ddl-auto=validate`).
+    * Verifica: persistencia de `parameters` (jsonb), query de última `JobExecution`, paginación por `status`.
+
+* **Smokes sin BD (web/actuator/config):**
+
+    * Deshabilitar Flyway en el test:
+
+      ```java
+      @SpringBootTest(properties = {
+        "spring.flyway.enabled=false",
+        "spring.jpa.hibernate.ddl-auto=none"
+      })
+      class HealthExtraControllerIT { }
+      ```
+
+* **Opcional:** si necesitas H2, crea migraciones en `db/migration/h2/` (sin `CREATE EXTENSION` ni `jsonb`) y deja `locations: classpath:db/migration/{vendor}`.
+
+---
+
+## Errores típicos y solución
+
+* **Duplicated version** (`Found more than one migration with version 1`):
+
+    * Evita tener `V1__*.sql` en `src/main/resources` y `src/test/resources` a la vez.
+    * Mantén todas las versionadas en `main` y usa `R__*.sql` para seeds de test.
+
+* **H2 ejecutando SQL PG** (`CREATE EXTENSION`, `jsonb`):
+
+    * Vendoriza migraciones (`{vendor}`) o desactiva Flyway en smokes.
+
+* **Mismatch de tipos** (`char(64)` vs `varchar(64)`):
+
+    * Aplica `V2__alter_checksum_to_varchar.sql` o ajusta `@Column(columnDefinition = "char(64)")` (no recomendado).
+
+---
+
+## Verificación
+
+**Desarrollo (dev):**
+
+```bash
+export SPRING_PROFILES_ACTIVE=dev DB_URL=jdbc:postgresql://localhost:5432/dataflow DB_USER=app DB_PASSWORD=secret
+mvn -pl api-service spring-boot:run
+```
+
+**Tests (PostgreSQL real):**
+
+```bash
+mvn -pl api-service -Dtest=RepositoryIT,DbSmokeTest test
+```
+
+Debes ver en logs: `Successfully applied V1` (+ `V2` si procede) y `ddl-auto=validate` sin errores.
+
+---
+
+## Criterios de aceptación
+
+* Migraciones Flyway aplican limpias en PostgreSQL (V1 + V2).
+* `ProcessingRequestEntity.parameters` persiste/lee como **jsonb**.
+* Tests de integración pasan con Testcontainers; smokes no fallan por SQL de Postgres.
+* `users` refleja `email UNIQUE`, `role` (string) y `created_at`.
+
+---
+
