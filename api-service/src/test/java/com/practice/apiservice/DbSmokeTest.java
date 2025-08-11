@@ -29,7 +29,6 @@ class DbSmokeTest {
         try (var conn = dataSource.getConnection()) {
             assertThat(conn.isValid(2)).isTrue();
         }
-        // Si todavía no tienes scripts, flyway puede ser null y no pasa nada.
         if (flyway != null) {
             assertThat(flyway.info()).isNotNull();
         }

@@ -1457,3 +1457,139 @@ volumes:
 
 ---
 
+# HU F2-08 — Repositorios JPA e infraestructura de persistencia
+
+> **Objetivo:** persistir los agregados del dominio **sin anotar \*\*\*\*\*\*\*\*`core`**, creando **entidades JPA** y **repos Spring Data** en `api-service` (capa infra). Guardar `parameters` como **JSONB** y exponer consultas básicas necesarias para B2.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../infra/db/converter/MapToJsonConverter.java`
+* `api-service/src/main/java/.../infra/db/entity/`
+  `UserEntity.java`, `DataFileEntity.java`, `BatchJobConfigEntity.java`, `ProcessingRequestEntity.java`, `JobExecutionEntity.java`, `ReportEntity.java`
+* `api-service/src/main/java/.../infra/db/repo/`
+  `UserRepository.java`, `DataFileRepository.java`, `BatchJobConfigRepository.java`, `ProcessingRequestRepository.java`, `JobExecutionRepository.java`, `ReportRepository.java`
+* *(opcional)* `api-service/src/main/java/.../infra/db/mapper/` (MapStruct)
+  `UserMapper.java`, `DataFileMapper.java`, `ProcessingRequestMapper.java`
+* `api-service/src/test/java/.../infra/db/RepositoryIT.java` (tests de integración con Testcontainers)
+
+**Dependencias**: se reutilizan las de HU F2-07 (JPA, PostgreSQL, Testcontainers). Si usas MapStruct, añade `mapstruct` + `mapstruct-processor` (annotation processor) en `api-service/pom.xml`.
+
+---
+
+## Estructura de paquetes
+
+```
+api-service/
+ └─ src/main/java/com/practice/apiservice/infra/db/
+    ├─ converter/MapToJsonConverter.java
+    ├─ entity/
+    │   ├─ UserEntity.java
+    │   ├─ DataFileEntity.java
+    │   ├─ BatchJobConfigEntity.java
+    │   ├─ ProcessingRequestEntity.java
+    │   ├─ JobExecutionEntity.java
+    │   └─ ReportEntity.java
+    ├─ repo/
+    │   ├─ UserRepository.java
+    │   ├─ DataFileRepository.java
+    │   ├─ BatchJobConfigRepository.java
+    │   ├─ ProcessingRequestRepository.java
+    │   ├─ JobExecutionRepository.java
+    │   └─ ReportRepository.java
+    └─ mapper/ (opcional)
+```
+
+> Todo cuelga de `com.practice.apiservice` para que **component-scan** los detecte sin `@EnableJpaRepositories/@EntityScan`.
+
+---
+
+## Entidades JPA (resumen)
+
+* **UserEntity** → tabla `users` (`id: uuid`, `name` opcional).
+* **DataFileEntity** → `data_files` con: `originalFilename`, `storagePath`, `sizeBytes`, `checksumSha256`, `uploadedAt`, `uploadedBy (FK → users)`.
+* **BatchJobConfigEntity** → `batch_job_configs` con: `name`, `description`, `chunkSize`, `readerType`, `writerType`, `allowRestart`, `createdAt`, `active`.
+* **ProcessingRequestEntity** → `processing_requests` con: `title`, `dataFile (FK)`, `parameters: jsonb`, `status (enum)`, `createdAt`, `requestedBy (FK)`, `batchJobConfig (FK)`.
+* **JobExecutionEntity** → `job_executions` con: `processingRequest (FK)`, `startTime`, `endTime`, `exitStatus (enum)`, `readCount`, `writeCount`, `skipCount`, `errorMessage`.
+* **ReportEntity** → `reports` con: `processingRequest (FK)`, `storagePath`, `summaryJson (text)`, `generatedAt`, `generatedBy (FK)`.
+
+> Todas las `@Id` son `UUID` (`columnDefinition = "uuid"`). `parameters` usa **JSONB** con el converter de abajo.
+
+---
+
+## Converter JSONB
+
+`MapToJsonConverter` serializa `Map<String,String>` ⇄ `jsonb` usando Jackson. Se aplica en `ProcessingRequestEntity.parameters` con `@Convert(converter = MapToJsonConverter.class)` y `@Column(columnDefinition = "jsonb")`.
+
+---
+
+## Repositorios Spring Data (interfaz)
+
+> No es obligatorio anotar con `@Repository` al extender `JpaRepository` (Spring Data registra el bean automáticamente). Puedes anotarlo si quieres hacerlo explícito.
+
+* `UserRepository extends JpaRepository<UserEntity, UUID>`
+* `DataFileRepository extends JpaRepository<DataFileEntity, UUID>`
+* `BatchJobConfigRepository extends JpaRepository<BatchJobConfigEntity, UUID>`
+* `ProcessingRequestRepository extends JpaRepository<ProcessingRequestEntity, UUID>`
+
+    * `Page<ProcessingRequestEntity> findByStatus(RequestStatus status, Pageable pageable)`
+* `JobExecutionRepository extends JpaRepository<JobExecutionEntity, UUID>`
+
+    * `Optional<JobExecutionEntity> findTop1ByProcessingRequestIdOrderByStartTimeDesc(UUID processingRequestId)`
+* `ReportRepository extends JpaRepository<ReportEntity, UUID>`
+
+---
+
+## Mappers (opcional, MapStruct)
+
+Si necesitas llevar entidades a objetos de dominio (p. ej. para B1/F2-06):
+
+* `UserMapper` → `User.ofId(entity.getId())`
+* `DataFileMapper` → construye `DataFile` del core con sus campos
+* `ProcessingRequestMapper` → crea `ProcessingRequest` del core y ajusta `status` aplicando sus transiciones (`markInProgress`, `markCompleted`, `markFailed`) según el enum almacenado.
+
+> `BatchJobConfig` en el core usa builder con `logicalName` y genera ID; si solo necesitas el **id** en consultas, puedes omitir su reconstrucción completa hasta B5/B6.
+
+---
+
+## Tests de integración (`RepositoryIT`)
+
+* **Tipo:** `@DataJpaTest` + **Testcontainers** (reutiliza lo de F2-07).
+* **Esquema:** para esta HU, `spring.jpa.hibernate.ddl-auto=create-drop` y `spring.flyway.enabled=false` en el test. (En F2-09 migraremos a **Flyway**.)
+* **Cobertura:**
+
+    * Persistir `ProcessingRequestEntity` con `parameters` y leerlos de vuelta.
+    * Crear 3 `JobExecutionEntity` con `startTime` distintos y comprobar que `findTop1ByProcessingRequestIdOrderByStartTimeDesc(...)` devuelve la última.
+    * Consulta paginada `findByStatus(...)`.
+
+**Ejemplo de aserción de “última ejecución”**
+
+```java
+var last = execs.findTop1ByProcessingRequestIdOrderByStartTimeDesc(prId).orElseThrow();
+assertThat(last.getStartTime()).isEqualTo(t2).isAfter(t1).isAfter(t3);
+```
+
+---
+
+## Configuración de test
+
+* Mantén `application-test.yml` **sin** `spring.datasource.*` (Testcontainers inyecta).
+* Si tu Boot < 3.1, añade `@DynamicPropertySource` en el test para mapear las props del contenedor.
+
+---
+
+## Criterios de aceptación
+
+* CRUD básico para `User`, `DataFile`, `ProcessingRequest` pasa en tests de integración.
+* Query `findTopByProcessingRequestIdOrderByStartTimeDesc` devuelve la ejecución correcta.
+* Conversor JSONB funciona: inserta/lee `parameters` sin pérdida.
+
+---
+
+## Notas
+
+* `@Repository` en interfaces de Spring Data es **opcional**.
+* En B2-09 se introducirá **Flyway** para el esquema; por ahora los tests generan tablas con Hibernate (`create-drop`).
+
+---
