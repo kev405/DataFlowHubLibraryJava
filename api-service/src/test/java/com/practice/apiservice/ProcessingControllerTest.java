@@ -3,7 +3,7 @@ package com.practice.apiservice;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.practice.apiservice.config.AppBatchProps;
 import com.practice.apiservice.dto.processing.CreateProcessingRequest;
-import com.practice.apiservice.exception.ApiErrorHandler;
+import com.practice.apiservice.exception.RestExceptionHandler;
 import com.practice.apiservice.rest.ProcessingController;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = ProcessingController.class)
-@Import(ApiErrorHandler.class) // 👈 asegura que el handler esté activo
+@Import(RestExceptionHandler.class) // 👈 asegura que el handler esté activo
 class ProcessingControllerTest {
 
     @Autowired MockMvc mvc;

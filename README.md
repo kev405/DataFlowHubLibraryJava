@@ -1777,3 +1777,112 @@ Debes ver en logs: `Successfully applied V1` (+ `V2` si procede) y `ddl-auto=val
 
 ---
 
+# F2-10 — Manejador global de errores (REST)
+
+> **Objetivo:** unificar el **formato JSON** de errores en toda la API con un `@RestControllerAdvice`, mapear correctamente las excepciones comunes (validación, negocio, infraestructura) y cubrirlo con tests de MVC.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../exception/RestExceptionHandler.java` *(nuevo handler global)*
+* `api-service/src/test/java/.../RestExceptionHandlerTest.java` *(tests de mapeo 400/404/503/500)*
+* **Elimina/sustituye** `ApiErrorHandler` previo para evitar dos `@RestControllerAdvice` en el contexto.
+
+**Dependencias:** se reutilizan las de `api-service` (incl. `spring-boot-starter-validation`). No se tocan `core` ni `lib`.
+
+---
+
+## Formato de respuesta de error
+
+```json
+{
+  "timestamp": "2025-08-11T03:15:29.123Z",
+  "path": "/ruta",
+  "code": "VALIDATION_ERROR",
+  "message": "Invalid request",
+  "fields": [ {"field": "title", "message": "must not be blank"} ],
+  "traceId": "..."  // opcional si hay MDC/observabilidad
+}
+```
+
+**Tipos auxiliares:**
+
+* `FieldItem { field, message }`
+* `ErrorResponse { timestamp, path, code, message, fields[], traceId? }`
+
+---
+
+## Mapeos implementados
+
+| HTTP | code                      | Excepción manejada                                                                                                                               |
+| ---- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400  | `VALIDATION_ERROR`        | `MethodArgumentNotValidException`, `BindException`, `ConstraintViolationException`, `HttpMessageNotReadableException` *(→ **`MALFORMED_JSON`**)* |
+| 400  | `BUSINESS_RULE_VIOLATION` | `IllegalArgumentException` (mensajes de dominio mapeados a `fields` cuando aplica)                                                               |
+| 400  | `FILE_TOO_LARGE`          | `FileTooLargeException`                                                                                                                          |
+| 404  | `NOT_FOUND`               | `ResourceNotFoundException`                                                                                                                      |
+| 503  | `SERVICE_UNAVAILABLE`     | `DataAccessException` (problemas de BD/infra)                                                                                                    |
+| 500  | `UNEXPECTED_ERROR`        | `Exception` (catch‑all)                                                                                                                          |
+
+> **Nota:** los métodos `@ExceptionHandler` son **públicos**. El handler obtiene `traceId` de `MDC` si está disponible.
+
+---
+
+## Integración con controladores
+
+* No requieren cambios: cualquier excepción de las listadas será serializada con el formato anterior.
+* Para reglas de dominio que hoy lanzan `IllegalArgumentException`, el handler responde **400 BUSINESS\_RULE\_VIOLATION** y, si reconoce el mensaje, rellena `fields` (por ejemplo: `originalFilename is blank` → `fields[originalFilename]`).
+
+---
+
+## Tests
+
+### Opción A (recomendada): MockMvc standalone
+
+Registra explícitamente el controller de prueba y el advice:
+
+```java
+MockMvc mvc = MockMvcBuilders
+  .standaloneSetup(new DummyController())
+  .setControllerAdvice(new RestExceptionHandler())
+  .build();
+```
+
+Casos cubiertos en `RestExceptionHandlerTest`:
+
+* 400 con `fields[]` (Bean Validation)
+* 404 `NOT_FOUND`
+* 503 `SERVICE_UNAVAILABLE` (simulando `DataAccessException`)
+* 500 `UNEXPECTED_ERROR`
+
+### Opción B: `@WebMvcTest`
+
+```java
+@WebMvcTest(controllers = DummyController.class)
+@Import(RestExceptionHandler.class)
+@AutoConfigureMockMvc(addFilters = false) // si seguridad interfiere
+```
+
+> Si ves 500 en lugar de 400/404/503: confirma que el advice está **importado** en el slice y que los `@ExceptionHandler` son **public**.
+
+---
+
+## Troubleshooting
+
+* **500 en tests de validación:** faltaba importar el advice en `@WebMvcTest` o los `@ExceptionHandler` no eran `public`.
+* **`HttpMessageNotReadableException`** por JSON malformado: se devuelve `code="MALFORMED_JSON"` con 400.
+* **Tests que no usan BD fallan por Flyway/H2:** deshabilitar Flyway en esos tests (`spring.flyway.enabled=false`) o vendorizar migraciones (ver HU F2-09).
+
+---
+
+## Criterios de aceptación
+
+* Todas las respuestas de error comparten el **mismo shape** y `Content-Type: application/json`.
+* Validación → **400** con `fields[]`.
+* Recurso inexistente → **404 NOT\_FOUND**.
+* Problemas de BD → **503 SERVICE\_UNAVAILABLE**.
+* Errores no controlados → **500 UNEXPECTED\_ERROR**.
+* Tests de MVC cubren los cuatro escenarios anteriores.
+
+---
+
