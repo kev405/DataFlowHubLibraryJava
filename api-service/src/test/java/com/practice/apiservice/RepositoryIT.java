@@ -21,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @DataJpaTest(properties = {
-        "spring.jpa.hibernate.ddl-auto=create-drop", // para esta HU, sin Flyway
-        "spring.flyway.enabled=false"
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.flyway.enabled=true"
 })
 class RepositoryIT {
 
@@ -47,7 +47,7 @@ class RepositoryIT {
     @Test
     void persistsProcessingRequest_withJsonb_andFindsLastExecution() {
         // ---------- seed: user ----------
-        var user = new UserEntity(UUID.randomUUID(), "tester", "k@gmail.com", UserRole.ADMIN, Instant.now());
+        var user = new UserEntity(UUID.randomUUID(), "tester", "tester@gmail.com", UserRole.ADMIN, Instant.now());
         users.save(user);
 
         // ---------- seed: data file ----------

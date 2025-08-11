@@ -1,9 +1,6 @@
 package com.practice.apiservice.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -35,7 +32,15 @@ public class UserEntity {
 
     private String email;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
     private UserRole role;
 
+    @Column(nullable = false)
     private Instant createdAt;
+
+    @PrePersist
+    void prePersist() {
+        if (createdAt == null) createdAt = Instant.now();
+    }
 }

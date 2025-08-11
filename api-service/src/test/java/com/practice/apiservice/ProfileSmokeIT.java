@@ -9,7 +9,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.Environment;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
+        properties = {
+                "spring.flyway.enabled=false",
+                "spring.jpa.hibernate.ddl-auto=none"
+        })
 class ProfileSmokeIT {
 
     @Autowired Environment env;
