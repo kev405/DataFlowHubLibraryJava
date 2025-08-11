@@ -6,6 +6,7 @@ import com.practice.apiservice.dto.processing.ProcessingCreatedResponse;
 import com.practice.apiservice.exception.RestExceptionHandler;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +22,7 @@ public class ProcessingController {
     public ProcessingController(AppBatchProps props) { this.props = props; }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateProcessingRequest r, BindingResult br) {
         var title = r.title().trim();
         if (title.isEmpty())         br.rejectValue("title", "NotBlank", "must not be blank");
