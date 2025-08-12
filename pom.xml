@@ -209,6 +209,9 @@
               <exclude>com/bench/jmh_generated/**</exclude>
               <exclude>com/practice/bench/**</exclude>
               <exclude>com/practice/bench/jmh_generated/**</exclude>
+              <exclude>com/practice/apiservice/mapper/**</exclude>
+              <exclude>com/practice/apiservice/map/**</exclude>
+              <exclude>com/practice/apiservice/entity/**</exclude>
             </excludes>
           </configuration>
           <executions>

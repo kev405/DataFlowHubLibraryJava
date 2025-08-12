@@ -1,0 +1,33 @@
+<configuration>
+
+    <!-- Appender JSON a consola -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <!-- nivel y logger -->
+                <pattern>
+                    <pattern>{"level":"%level"}</pattern>
+                </pattern>
+                <loggerName/>
+                <threadName/>
+
+                <!-- TODO: aquí via MDC entran traceId, spanId, requestId, user, endpoint... -->
+                <mdc/>
+
+                <!-- mensaje y stacktrace si hay error -->
+                <message/>
+                <stackTrace/>
+            </providers>
+        </encoder>
+    </appender>
+
+    <!-- Nivel raíz por defecto -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- (Opcional) subpaquete de la app más verboso en dev -->
+    <!-- <logger name="com.practice.apiservice" level="DEBUG" /> -->
+
+</configuration>
