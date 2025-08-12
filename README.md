@@ -2214,3 +2214,102 @@ mvn test -Dtest=StructuredLoggingIT
 
 ---
 
+## F2-16 — Lanzar Job Batch vía REST (`POST /jobs/{id}/run`)
+
+> **Objetivo:** permitir la ejecución bajo demanda de un Job de Spring Batch vía un endpoint REST seguro y restringido a administradores.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../rest/JobController.java` *(nuevo controlador para ejecutar Jobs vía REST)*
+* `api-service/src/test/java/.../JobControllerTest.java` *(tests unitarios)*
+* Configuración de Spring Batch en perfiles `dev`, `test` y `prod` (`application-*.yml`).
+
+**Dependencias:** `spring-boot-starter-batch` (solo en `api-service`).
+
+---
+
+## Comportamiento implementado
+
+* Endpoint `POST /jobs/{configId}/run` protegido con rol **ADMIN**.
+* Construcción de `JobParameters` con:
+
+    * `processingRequestId` (UUID como String)
+    * `configId` (desde el path)
+    * `requestTime` (Instant en ISO-8601 o epoch para asegurar unicidad)
+* Uso de `JobLauncher.run(job, params)` para iniciar el Job y retorno **202 Accepted** con:
+
+    * Header `Location` apuntando a `/processings/{processingRequestId}`
+    * Body con `jobInstanceId` y `jobExecutionId`.
+* Control de concurrencia: si existe una ejecución `RUNNING` con los mismos parámetros clave, responde **409 Conflict** con código `JOB_ALREADY_RUNNING`.
+* Registro de métricas personalizadas (`dataflow.job.executions.total`).
+* Manejo de errores:
+
+    * Config desconocido → **404 CONFIG\_NOT\_FOUND**
+    * Error de infraestructura → **503**
+
+---
+
+## Ejecución de pruebas
+
+* **Unitarias:** Mock de `JobLauncher` para verificar construcción de `JobParameters` y respuesta 202.
+* **Integración:** con Spring Batch activo, ejecuta un Job dummy y verifica registros en tablas `BATCH_*`.
+
+```bash
+mvn test -Dtest=JobControllerTest
+```
+
+---
+
+## Ejemplo de uso
+
+**Request (mínimo):**
+
+```http
+POST /jobs/csv_to_ipa_v1/run
+Content-Type: application/json
+
+{
+  "processingRequestId": "7e2a1d7c-3b9b-4f1a-8a55-9a2f1e4c7788",
+  "parameters": { "delimiter": ";" }
+}
+```
+
+**Response (202):**
+
+```json
+{
+  "jobInstanceId": 123,
+  "jobExecutionId": 456
+}
+```
+
+**Conflicto si ya corre → 409:**
+
+```json
+{
+  "code": "JOB_ALREADY_RUNNING"
+}
+```
+
+---
+
+## Criterios de aceptación
+
+* Endpoint protegido (ADMIN) retorna 202 y `Location` válido.
+* Si existe ejecución RUNNING con mismos parámetros clave → 409.
+* Spring Batch crea registros en tablas `BATCH_*` o mock verificado en unit test.
+* Métrica `dataflow.job.executions.total` incrementa al aceptar.
+
+---
+
+## Notas
+
+* **Perfiles:** en `dev` y `test` usar H2; en `prod` conectar a base persistente.
+* **Persistencia:** esquema JDBC de Spring Batch se autoinicializa en `dev/test`; en `prod` incluir en Flyway.
+* **Seguridad:** restringido a rol `ADMIN` según configuración de `SecurityConfig`.
+* **Métricas:** visibles vía `/actuator/metrics/dataflow.job.executions.total`.
+
+---
+

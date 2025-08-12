@@ -5,6 +5,11 @@ spring:
     default: dev   # si no se especifica, arranca con dev
   main:
     web-application-type: servlet
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: always
 server:
   port: 8080
 management:

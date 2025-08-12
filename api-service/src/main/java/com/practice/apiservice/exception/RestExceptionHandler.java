@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
@@ -97,6 +99,13 @@ public class RestExceptionHandler {
     public ResponseEntity<ErrorResponse> onInfra(DataAccessException ex, HttpServletRequest req) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE",
                 "Database unavailable", req, List.of());
+    }
+
+    /* ---- seguridad (403) ---- */
+    @ExceptionHandler({AuthorizationDeniedException.class, AccessDeniedException.class})
+    public ResponseEntity<ErrorResponse> onAccessDenied(Exception ex, HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
+                "Access denied", req, List.of());
     }
 
     /* ---- catch-all (500) ---- */
