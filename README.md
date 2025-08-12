@@ -2313,3 +2313,79 @@ Content-Type: application/json
 
 ---
 
+## F2-17 — Scheduler diario con `@EnableScheduling` (02:00 en `prod`)
+
+> **Objetivo:** Automatizar la ejecución diaria de Jobs Batch a las 02:00 en el entorno de producción, con control de concurrencia, métricas y logs estructurados.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/java/.../BatchScheduler.java` *(nuevo scheduler)*
+* `application-prod.yml` *(propiedad `scheduling.enabled=true`)*
+* `application-dev.yml` y `application-test.yml` *(propiedad `scheduling.enabled=false`)*
+
+**Dependencias:** uso de `spring-context` para `@EnableScheduling` y `@Scheduled`.
+
+---
+
+## Comportamiento implementado
+
+* El scheduler se activa únicamente en perfil **`prod`** gracias a la propiedad `scheduling.enabled=true`.
+* A las **02:00** se ejecuta el método planificado (`@Scheduled(cron = "0 0 2 * * *")`).
+* Consulta en la base de datos todas las solicitudes de procesamiento (`ProcessingRequest`) con estado **PENDING** (máx. 50 por ciclo).
+* Para cada solicitud, invoca internamente el mismo servicio que expone el endpoint `/jobs/{configId}/run` de la HU F2-16.
+* Verifica mediante `JobExplorer` que no exista ya una ejecución **RUNNING** para el mismo `processingRequestId`.
+* Implementa control de back-pressure: si hay más de `N` ejecuciones en estado **RUNNING**, pospone el resto.
+* Registra en métricas (`dataflow.scheduler.trigger{result=launched|skipped}`) y logs (`traceId`) el resultado de cada ejecución.
+
+---
+
+## Ejecución del Scheduler
+
+* **Prod:** activo a las 02:00.
+* **Dev/Test:** desactivado (`scheduling.enabled=false`).
+
+---
+
+## Ejemplos
+
+**application-prod.yml**
+
+```yaml
+scheduling:
+  enabled: true
+```
+
+**Log esperado (JSON)**
+
+```json
+{
+  "message": "Scheduler launched 17 jobs",
+  "result": "launched",
+  "pending": 23,
+  "launched": 17,
+  "skipped": 6,
+  "traceId": "f91fa2b3c4d5e67a"
+}
+```
+
+---
+
+## Criterios de aceptación
+
+* Con `scheduling.enabled=true` en **prod**, el método se ejecuta a las **02:00**.
+* No lanza un job si ya hay una ejecución **RUNNING** para el mismo `processingRequestId`.
+* Métrica `dataflow.scheduler.trigger` visible en `/actuator/metrics`.
+* Tests unitarios verifican el comportamiento en ambos perfiles.
+
+---
+
+## Notas
+
+* En entornos locales, mantener `scheduling.enabled=false` para evitar ejecuciones involuntarias.
+* La implementación actual está preparada para integrarse con el flujo real de ejecución de jobs definido en la HU F2-16.
+* Los logs incluyen `traceId` para permitir trazabilidad completa de ejecuciones.
+
+---
+
