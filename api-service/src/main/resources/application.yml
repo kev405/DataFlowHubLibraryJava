@@ -9,13 +9,21 @@ server:
   port: 8080
 management:
   endpoints:
-    web:
-      exposure:
-        include: health,info
+    exposure:
+      include: health,info,metrics,prometheus
+    base-path: /actuator
   endpoint:
     health:
-      probes:
-        enabled: true
+      show-details: when_authorized
+  metrics:
+    metrics:
+      web:
+        server:
+          request:
+            autotime:
+              enabled: true
+    tags:
+      application: api-service
 app:
   batch:
     default-config-id: "00000000-0000-0000-0000-000000000001"
