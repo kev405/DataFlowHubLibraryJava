@@ -29,6 +29,8 @@ management:
               enabled: true
     tags:
       application: api-service
+scheduling:
+  enabled: false
 app:
   batch:
     default-config-id: "00000000-0000-0000-0000-000000000001"
