@@ -2076,3 +2076,70 @@ SecurityFilterChain jwtFilterChain(HttpSecurity http) throws Exception {
 * Documentar *error codes* de autenticación/autorización para los clientes (401 vs 403).
 
 ---
+
+## F2-14 — Actuator y Métricas (Micrometer)
+
+> **Objetivo:** habilitar y verificar métricas de Actuator, incluyendo métricas personalizadas para el conteo de ejecuciones de Job y pruebas de su exposición.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/resources/application.yml` *(configuración de exposición de endpoints Actuator y etiquetas de métricas)*
+* `api-service/src/main/java/.../metrics/JobMetrics.java` *(registro de métricas personalizadas con Micrometer)*
+* `api-service/src/test/java/.../HealthActuatorIT.java` *(test de integración para /actuator/health)*
+* `api-service/src/test/java/.../MetricsActuatorIT.java` *(test de integración para /actuator/metrics y métricas personalizadas)*
+
+**Dependencias:**
+
+* `spring-boot-starter-actuator` (endpoints de observabilidad)
+* `io.micrometer:micrometer-registry-prometheus` *(opcional para exposición en Prometheus)*
+
+---
+
+## Comportamiento probado
+
+* `/actuator/health` expuesto públicamente y retorna **200 OK** con estado `UP`.
+* `/actuator/metrics` accesible para usuarios autenticados.
+* Métrica personalizada `dataflow.job.executions.total` presente con tags configurados (`result=success|fail`).
+* Incremento del contador al simular la finalización de un Job.
+* Validación opcional de `/actuator/prometheus` si está habilitado.
+
+---
+
+## Implementación de pruebas
+
+* **Frameworks:** `SpringBootTest`, `MockMvc`, `JUnit 5`.
+* **Base de datos:** H2 en memoria para pruebas, Flyway deshabilitado.
+* **Flujo de test:**
+
+    1. Llamar a `/actuator/health` y verificar estado `UP`.
+    2. Consultar `/actuator/metrics/dataflow.job.executions.total` y validar presencia de `measurements`.
+    3. Simular incremento de contador y verificar cambio.
+
+---
+
+## Ejecución de las pruebas
+
+```bash
+mvn test -Dtest=HealthActuatorIT,MetricsActuatorIT
+```
+
+---
+
+## Criterios de aceptación
+
+* `/actuator/metrics` y `/actuator/health` expuestos según perfil.
+* `dataflow.job.executions.total` visible y se incrementa en pruebas.
+* `/actuator/prometheus` devuelve series con prefijo `dataflow_` si está habilitado.
+* Documentación breve en README sobre consulta y significado de métricas.
+
+---
+
+## Notas
+
+* En desarrollo, configurar cuidadosamente Actuator para no exponer información sensible.
+* Tag `application` definido como `dataflowhub-api` para dashboards.
+* Con Prometheus habilitado, `/actuator/prometheus` puede ser consumido por Prometheus o APM compatible.
+
+---
