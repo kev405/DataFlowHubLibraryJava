@@ -2143,3 +2143,74 @@ mvn test -Dtest=HealthActuatorIT,MetricsActuatorIT
 * Con Prometheus habilitado, `/actuator/prometheus` puede ser consumido por Prometheus o APM compatible.
 
 ---
+
+## F2-15 — Logs Estructurados (JSON) con traceId
+
+> **Objetivo:** habilitar logs en formato JSON que incluyan `traceId` para mejorar la trazabilidad y facilitar la integración con herramientas de análisis de logs.
+
+---
+
+## Archivos creados/actualizados
+
+* `api-service/src/main/resources/logback-spring.xml` *(configuración para salida JSON con traceId/spandId en cada evento)*
+* `api-service/src/test/java/.../StructuredLoggingIT.java` *(test de integración para validar formato y campos clave)*
+* Configuración por perfil en `application.yml` y `application-dev.yml` para niveles de logging.
+
+**Dependencias:**
+
+* Opción A: `net.logstash.logback:logstash-logback-encoder` para JSON estructurado.
+* Opción B: Patrón JSON manual con `%mdc` (sin encoder externo).
+
+---
+
+## Comportamiento implementado
+
+* Logs en formato JSON en entornos **dev** y **prod**.
+* Inclusión automática de `traceId` y `spanId` en cada evento.
+* Niveles de log configurables por perfil (`DEBUG` en dev, `INFO` en prod).
+* Integración opcional con Micrometer Tracing para poblar automáticamente el `traceId`.
+* Filtro `OncePerRequestFilter` para generar y propagar `traceId` cuando no exista.
+
+---
+
+## Ejemplo de log generado
+
+```json
+{
+  "timestamp": "2025-08-11T05:25:10.111Z",
+  "level": "INFO",
+  "logger": "com.dataflowhub.api.web.ProcessingController",
+  "traceId": "f9f1a2b3c4d5e67fa",
+  "message": "ProcessingRequest created",
+  "requestId": "7e2a1d7c-3b9b-4f1a-8a55-9a2f1e4c7788",
+  "user": "user@acme.com"
+}
+```
+
+---
+
+## Ejecución de las pruebas
+
+```bash
+mvn test -Dtest=StructuredLoggingIT
+```
+
+---
+
+## Criterios de aceptación
+
+* Logs en JSON en **dev/prod** con `traceId` presente.
+* Control de niveles por perfil (`DEBUG` en dev, `INFO` en prod).
+* Tests validan presencia de campos clave (`traceId`, `message`).
+* README de "Observabilidad" documenta cómo visualizar `/actuator/*` y ejemplo de log JSON.
+
+---
+
+## Notas
+
+* No incluir datos sensibles en los logs.
+* Se recomienda incluir campos de contexto como: `requestId`, `user`, `endpoint`.
+* Niveles: `INFO` normal, `WARN` recuperable, `ERROR` con stacktrace.
+
+---
+

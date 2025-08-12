@@ -14,6 +14,7 @@ public class HealthExtraController {
 
     @GetMapping("/ping")
     public String ping() {
+        logger.info("Ping received");
         return "pong";
     }
 
