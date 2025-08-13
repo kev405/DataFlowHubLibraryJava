@@ -2554,3 +2554,88 @@ curl http://localhost:8080/actuator/health
 
 ---
 
+## C0 – Batch Setup & Scaffolding
+
+### HU F3‑01 – Instalar Spring Batch y esquema `BATCH_*`
+
+#### 1. Dependencias
+
+Agregar en **`api-service/pom.xml`**:
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-batch</artifactId>
+</dependency>
+```
+
+#### 2. Configuración
+
+* Desactivar ejecución automática de jobs:
+
+```properties
+spring.batch.job.enabled=false
+```
+
+* Desactivar auto‑init de Spring Batch (usar Flyway):
+
+```properties
+spring.batch.jdbc.initialize-schema=never
+```
+
+* Desactivar DDL automático de Hibernate:
+
+```properties
+spring.jpa.hibernate.ddl-auto=none
+```
+
+* Configurar datasource (ejemplo PostgreSQL UTC):
+
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5432/appdb
+spring.datasource.username=app
+spring.datasource.password=app
+spring.jpa.properties.hibernate.jdbc.time_zone=UTC
+```
+
+#### 3. Migraciones Flyway
+
+* Crear archivo `src/main/resources/db/migration/V1__spring_batch_schema.sql` con el script oficial de Spring Batch para PostgreSQL (`schema-postgresql.sql`).
+* Si el esquema ya tiene tablas y no existe `flyway_schema_history`, establecer en el perfil correspondiente:
+
+```yaml
+spring:
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
+```
+
+Esto evita que Flyway intente recrear tablas existentes.
+
+#### 4. Verificación
+
+* Iniciar la aplicación y comprobar en logs que las migraciones Flyway se aplicaron correctamente.
+* Consultar en la base:
+
+```sql
+SELECT count(*) FROM BATCH_JOB_INSTANCE;
+SELECT count(*) FROM BATCH_JOB_EXECUTION;
+SELECT count(*) FROM BATCH_STEP_EXECUTION;
+```
+
+* Confirmar que existe la tabla `flyway_schema_history`.
+
+#### 5. Criterios de aceptación
+
+* La app inicia sin errores relacionados a tablas batch.
+* `spring.batch.job.enabled=false` activo en todos los perfiles.
+* Tablas `BATCH_*` visibles en la base configurada.
+* Migraciones registradas en `flyway_schema_history`.
+
+#### 6. Notas
+
+* En **dev/test** se puede limpiar el esquema para aplicar `V1__...` desde cero.
+* En **prod** nunca usar `spring.batch.jdbc.initialize-schema=always`; siempre controlar el esquema con Flyway.
+
+---
+
