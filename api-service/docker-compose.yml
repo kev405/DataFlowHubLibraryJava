@@ -1,14 +1,49 @@
+version: "3.8"
+
 services:
-  postgres:
+  db:
     image: postgres:16-alpine
-    container_name: dataflow_pg_prod
+    container_name: dfh_db
     environment:
-      POSTGRES_DB: dataflow
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-dataflow}
+      POSTGRES_USER: ${DB_USER:-app}
+      POSTGRES_PASSWORD: ${DB_PASS:-secret}
     ports:
-      - "5432:5432"
+      - "5432:5432"             # opcional para acceso local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-app} -d ${DB_NAME:-dataflow}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  api:
+    image: dataflowhub/api-service:latest   # o usa `build: .` si quieres compilar aquí
+    container_name: dfh_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-dataflow}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-app}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASS:-secret}
+      SPRING_JPA_PROPERTIES_HIBERNATE_JDBC_TIME_ZONE: UTC
+      # Exponer health/metrics (útil para healthcheck)
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      # Si no quieres que el scheduler corra en compose:
+      SCHEDULING_ENABLED: ${SCHEDULING_ENABLED:-false}
+      # Flyway (ajusta según tu estrategia)
+      SPRING_FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: ${FLYWAY_BASELINE_ON_MIGRATE:-false}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep '\"status\":\"UP\"' -q"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 volumes:
   pgdata:
