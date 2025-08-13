@@ -2498,3 +2498,59 @@ services:
 
 ---
 
+## HU-F2-21 – docker-compose con Postgres y la app
+
+### 1. Objetivo
+
+Configurar un entorno reproducible para levantar la base de datos PostgreSQL y la aplicación de forma conjunta mediante **docker-compose**, facilitando el arranque local y en CI/CD.
+
+### 2. Pasos realizados
+
+1. **Creación de `docker-compose.yml`** con dos servicios:
+
+    * **db**: imagen oficial de PostgreSQL (v16-alpine) configurada con credenciales y base de datos `dataflow`.
+    * **api**: imagen generada de la app (`dataflowhub/api-service:latest`).
+
+2. **Configuración de variables de entorno** para la conexión a la base de datos y perfil `prod`.
+
+3. **Implementación de healthchecks** en ambos servicios para garantizar que `api` solo inicie tras confirmarse que `db` está saludable.
+
+4. **Persistencia de datos** mediante volumen `pgdata` asociado a `/var/lib/postgresql/data`.
+
+5. **Parámetros adicionales**:
+
+    * Puerto `5432` expuesto para acceso local a la base de datos.
+    * Puerto `8080` expuesto para acceso a la API.
+    * Variable `SCHEDULING_ENABLED` configurada a `false` para evitar ejecuciones involuntarias del scheduler en local/compose.
+
+### 3. Ejemplo de uso
+
+```bash
+# Levantar la base de datos y la app en segundo plano
+docker compose up -d
+
+# Verificar estado de la API
+curl http://localhost:8080/actuator/health
+```
+
+### 4. Buenas prácticas
+
+* Usar archivo `.env` para credenciales en local y variables distintas en CI/Prod.
+* Si se usa Flyway, confirmar que `V1__baseline.sql` se aplica correctamente al inicio.
+* Para logs JSON, asegurarse de incluir `logback-spring.xml` (B5) en la imagen.
+
+### 5. Criterios de aceptación
+
+* `docker compose up -d` levanta `db` saludable y luego `api`.
+* `curl http://localhost:8080/actuator/health` devuelve `UP`.
+* La app se conecta a PostgreSQL y aplica migraciones Flyway sin errores.
+* Variables de entorno controlan correctamente el perfil y el scheduler.
+
+### 6. Notas
+
+* El healthcheck de la base de datos usa `pg_isready -U app -d dataflow`.
+* El healthcheck de la API consulta `/actuator/health` y verifica estado `UP`.
+* Compatible con entornos locales y CI/CD sin cambios en configuración.
+
+---
+
