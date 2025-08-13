@@ -1,11 +1,11 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: dataflow_pg
+    container_name: dataflow_pg_prod
     environment:
       POSTGRES_DB: dataflow
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: secret
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
