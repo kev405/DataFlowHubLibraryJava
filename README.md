@@ -2389,3 +2389,112 @@ scheduling:
 
 ---
 
+## F2-20 — Configuración de despliegue con Docker
+
+> **Objetivo:** preparar la aplicación `api-service` para ser empaquetada y ejecutada en contenedores Docker, incluyendo configuración para PostgreSQL y perfiles de ejecución.
+
+---
+
+## Archivos creados/actualizados
+
+* `Dockerfile` *(nuevo)* — Construcción multi-stage (JDK para compilación, JRE para ejecución) con empaquetado optimizado.
+* `docker-compose.yml` *(nuevo)* — Orquestación de `api-service` y base de datos PostgreSQL.
+* Configuración en `application.properties` para soportar variables de entorno y perfiles (`prod`, `dev`, `test`).
+
+**Dependencias:**
+
+* Imagen base `eclipse-temurin` (Java 21).
+* PostgreSQL 16-alpine.
+
+---
+
+## Comportamiento esperado
+
+* Construcción del JAR mediante **multi-stage build**:
+
+    1. Etapa de compilación con Maven y JDK 21.
+    2. Etapa final con JRE 21 y el `app.jar` listo para ejecutar.
+* Ejecución en contenedor con variables de entorno para DB y perfil activo.
+* Orquestación con `docker-compose` que levanta la app y PostgreSQL en red compartida.
+* Posibilidad de usar `host.docker.internal` para conectar a PostgreSQL local en entornos sin Compose.
+
+---
+
+## Ejecución de pruebas
+
+### 1) Solo la imagen de la app (sin DB)
+
+```bash
+docker build -t dataflowhub/api-service .
+docker run --rm -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e SPRING_FLYWAY_ENABLED=false \
+  -e SPRING_DATASOURCE_URL='jdbc:h2:mem:testdb;MODE=PostgreSQL' \
+  dataflowhub/api-service
+```
+
+### 2) App + DB con Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Esto levanta PostgreSQL (`db`) y `api-service` conectados en la misma red Docker.
+
+### 3) App conectando a DB local
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/dataflow' \
+  -e SPRING_DATASOURCE_USERNAME=app \
+  -e SPRING_DATASOURCE_PASSWORD=secret \
+  dataflowhub/api-service
+```
+
+---
+
+## Ejemplo de configuración `docker-compose.yml`
+
+```yaml
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dataflow
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/dataflow
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: secret
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+```
+
+---
+
+## Criterios de aceptación
+
+* Se puede construir la imagen del servicio con `docker build` sin errores.
+* La aplicación inicia correctamente en contenedor usando DB en Compose.
+* Se soporta conexión a DB local o en otro contenedor usando variables de entorno.
+* El empaquetado multi-stage reduce el tamaño final de la imagen.
+
+---
+
+## Notas
+
+* En Windows/Mac, `host.docker.internal` apunta al host; en Linux puede requerir configuración adicional.
+* Flyway está habilitado en `prod` por defecto; deshabilitar (`SPRING_FLYWAY_ENABLED=false`) si no se desea migrar en contenedor.
+* Para desarrollo, se recomienda mapear `application.properties` externos como volumen para ajustes rápidos sin reconstruir la imagen.
+
+---
+

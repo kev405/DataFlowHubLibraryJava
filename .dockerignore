@@ -1,0 +1,10 @@
+.git
+.gitignore
+**/target
+**/.idea
+**/.classpath
+**/.project
+**/.settings
+**/.DS_Store
+docker-compose.yml
+README.md
