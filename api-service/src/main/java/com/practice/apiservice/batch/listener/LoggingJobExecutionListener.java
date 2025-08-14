@@ -51,7 +51,7 @@ public class LoggingJobExecutionListener implements JobExecutionListener {
         long start = jobExecution.getExecutionContext().getLong(START_NANO, System.nanoTime());
         long durationNs = System.nanoTime() - start;
 
-        // Métrica: total de ejecuciones por job y status
+        // Metric: total executions per job and status
         registry.counter("dataflow.job.executions.total",
                 "job", jobExecution.getJobInstance().getJobName(),
                 "status", jobExecution.getStatus().name()
