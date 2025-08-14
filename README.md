@@ -2819,3 +2819,68 @@ Ejemplo de payload REST y cómo se mapea:
 
 ---
 
+### HU F3-05 – JobParametersValidator por job
+
+#### 1. Objetivo
+
+Implementar validación centralizada de parámetros de job mediante `JobParametersValidator` específico para cada job productivo.
+
+#### 2. Implementación principal
+
+* Crear clase `CsvToJpaJobParametersValidator` que verifique:
+
+  * Presencia de `processingRequestId`, `configId` y `storagePath`.
+  * Formato UUID válido en `processingRequestId`.
+  * Valores permitidos para `delimiter` y rango válido para `chunkSize`.
+  * (Opcional) Validar existencia del archivo en `storagePath` si el entorno lo permite, o diferir validación al `ItemReader`.
+* Registrar el validador en la definición del job:
+
+```java
+@Bean
+public Job csvToJpaJob(JobRepository jobRepository,
+                       Step csvToJpaStep,
+                       CsvToJpaJobParametersValidator validator) {
+    return new JobBuilder("csvToJpaJob", jobRepository)
+        .validator(validator)
+        .start(csvToJpaStep)
+        .build();
+}
+```
+
+* Implementar tests unitarios que:
+
+    * Pasen con parámetros válidos.
+    * Llamen a `validate(...)` y confirmen que se lanza `JobParametersInvalidException` para faltantes, formato inválido o valores fuera de rango.
+
+#### 3. Ejemplos prácticos
+
+**Parámetros válidos:**
+
+```
+processingRequestId=7e2a... (UUID)
+configId=csv_to_jpa_v1
+storagePath=/data/in/ventas.csv
+delimiter=; (opcional)
+chunkSize=1000 (opcional)
+```
+
+**Parámetros inválidos (lanza JobParametersInvalidException):**
+
+```
+processingRequestId=not-a-uuid
+configId=csv_to_jpa_v1
+```
+
+#### 4. Verificación
+
+* Ejecutar un job con parámetros válidos → pasa validación y arranca.
+* Ejecutar un job con parámetros faltantes o inválidos → falla antes de iniciar steps y muestra mensaje descriptivo.
+
+#### 5. Criterios de aceptación
+
+* Todos los jobs productivos tienen `validator()` asociado.
+* Tests cubren al menos: OK, falta clave, formato inválido, valor fuera de rango.
+* Mensajes de excepción son descriptivos e incluyen el nombre de la clave inválida.
+
+---
+
