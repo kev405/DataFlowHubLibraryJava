@@ -39,7 +39,7 @@ public class MetricsStepListener implements StepExecutionListener {
                 .register(registry)
                 .record(Duration.ofNanos(durationNs));
 
-        // Contadores de lecturas/escrituras/skips
+        // Counters for reads/writes/skips
         registry.counter("dataflow.step.reads", "job", job, "step", step)
                 .increment(stepExecution.getReadCount());
         registry.counter("dataflow.step.writes", "job", job, "step", step)
