@@ -1,6 +1,7 @@
-// src/main/java/.../batch/DemoJobConfig.java
 package com.practice.apiservice.batch;
 
+import com.practice.apiservice.batch.listener.LoggingJobExecutionListener;
+import com.practice.apiservice.batch.listener.MetricsStepListener;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -15,16 +16,22 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class DemoJobConfig {
 
     @Bean
-    public Job demoJob(JobRepository jobRepository, Step demoStep) {
+    public Job demoJob(JobRepository jobRepository,
+                       Step demoStep,
+                       LoggingJobExecutionListener jobListener) {
         return new JobBuilder("demoJob", jobRepository)
+                .listener(jobListener)
                 .start(demoStep)
                 .build();
     }
 
     @Bean
-    public Step demoStep(JobRepository jobRepository, PlatformTransactionManager tx) {
+    public Step demoStep(JobRepository jobRepository,
+                         PlatformTransactionManager tx,
+                         MetricsStepListener stepListener) {
         return new StepBuilder("demoStep", jobRepository)
-                .tasklet((contrib, ctx) -> RepeatStatus.FINISHED, tx)
+                .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED, tx)
+                .listener(stepListener)
                 .build();
     }
 }

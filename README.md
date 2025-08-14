@@ -2704,3 +2704,81 @@ public Step demoStep(JobRepository jobRepository, PlatformTransactionManager tx)
 
 ---
 
+### HU F3-03 – Listeners comunes de Job/Step (logs + métricas)
+
+#### 1. Objetivo
+
+Implementar listeners reutilizables para todos los jobs y steps que registren logs estructurados y publiquen métricas operativas vía Micrometer.
+
+#### 2. Configuración principal
+
+* `LoggingJobExecutionListener`: implementa `JobExecutionListener` para:
+
+    * Loguear inicio y fin de cada job (`jobName`, `executionId`, parámetros, estado y duración).
+    * Publicar métricas:
+
+        * `dataflow.job.executions.total{job, status}` (counter)
+        * `dataflow.job.duration{job}` (timer)
+* `MetricsStepListener`: implementa `StepExecutionListener` para:
+
+    * Capturar tiempos de ejecución de cada step.
+    * Publicar contadores de `readCount`, `writeCount`, `skipCount`.
+    * Publicar métrica:
+
+        * `dataflow.step.duration{job, step}` (timer)
+        * `dataflow.step.reads{job, step}` (counter)
+        * `dataflow.step.writes{job, step}` (counter)
+        * `dataflow.step.skips{job, step}` (counter)
+
+#### 3. Integración en Jobs/Steps
+
+* Registrar `LoggingJobExecutionListener` a nivel de job.
+* Registrar `MetricsStepListener` a nivel de step.
+* Ejemplo:
+
+```java
+@Bean
+public Job demoJob(JobRepository jobRepository,
+                   Step demoStep,
+                   LoggingJobExecutionListener jobListener) {
+  return new JobBuilder("demoJob", jobRepository)
+      .listener(jobListener)
+      .start(demoStep)
+      .build();
+}
+
+@Bean
+public Step demoStep(JobRepository jobRepository,
+                     PlatformTransactionManager tx,
+                     MetricsStepListener stepListener) {
+  return new StepBuilder("demoStep", jobRepository)
+      .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED, tx)
+      .listener(stepListener)
+      .build();
+}
+```
+
+#### 4. Ejemplo de log
+
+```json
+{"event":"JOB_END","job":"csvToJpaJob","executionId":456,"status":"COMPLETED","durationMs":8421}
+```
+
+#### 5. Verificación
+
+* Al ejecutar un job, revisar en logs el inicio y fin con `executionId` y duración.
+* Consultar en `/actuator/metrics` que las métricas anteriores estén disponibles con etiquetas `job` y `step`.
+
+#### 6. Criterios de aceptación
+
+* Cualquier job nuevo hereda estos listeners sin código adicional.
+* Logs incluyen `executionId` y duración.
+* Métricas visibles en Actuator y Prometheus (si está configurado).
+
+#### 7. Notas
+
+* Requiere dependencia `micrometer-core` y configuración de Actuator.
+* Evitar registrar múltiples listeners del mismo tipo para no duplicar métricas o logs.
+
+---
+
