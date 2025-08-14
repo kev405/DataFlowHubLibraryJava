@@ -32,7 +32,7 @@ public class MetricsStepListener implements StepExecutionListener {
         long start = stepExecution.getExecutionContext().getLong(START_NANO, System.nanoTime());
         long durationNs = System.nanoTime() - start;
 
-        // Duración del step
+        // Step duration
         Timer.builder("dataflow.step.duration")
                 .tag("job", job)
                 .tag("step", step)
