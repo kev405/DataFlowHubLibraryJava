@@ -57,7 +57,7 @@ public class LoggingJobExecutionListener implements JobExecutionListener {
                 "status", jobExecution.getStatus().name()
         ).increment();
 
-        // Métrica: duración del job (timer)
+        // Metric: job duration (timer)
         Timer.builder("dataflow.job.duration")
                 .description("Job duration in seconds")
                 .tag("job", jobExecution.getJobInstance().getJobName())
