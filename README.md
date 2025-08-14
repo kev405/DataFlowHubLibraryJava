@@ -2639,3 +2639,68 @@ SELECT count(*) FROM BATCH_STEP_EXECUTION;
 
 ---
 
+### HU F3-02 – Configuración base de infraestructura Batch
+
+#### 1. Objetivo
+
+Configurar la infraestructura base de Spring Batch para exponer `JobRepository`, `JobLauncher` y `JobRegistry` de forma controlada, permitiendo registrar y lanzar jobs por nombre.
+
+#### 2. Configuración principal
+
+* Extender `DefaultBatchConfiguration` para personalizar `DataSource` y `PlatformTransactionManager`.
+* Declarar un único `JobRegistry` y registrador (`JobRegistrySmartInitializingSingleton`) para evitar duplicados.
+* Definir un job de prueba (`demoJob`) y un step (`demoStep`) que utilice explícitamente el `PlatformTransactionManager`.
+
+#### 3. Beans clave
+
+```java
+@Bean
+public JobRegistry jobRegistry() {
+  return new MapJobRegistry();
+}
+
+@Bean
+public JobRegistrySmartInitializingSingleton jobRegistryInitializer(JobRegistry jobRegistry) {
+  JobRegistrySmartInitializingSingleton init = new JobRegistrySmartInitializingSingleton();
+  init.setJobRegistry(jobRegistry);
+  return init;
+}
+```
+
+#### 4. Job y Step de prueba
+
+```java
+@Bean
+public Job demoJob(JobRepository jobRepository, Step demoStep) {
+  return new JobBuilder("demoJob", jobRepository)
+      .start(demoStep)
+      .build();
+}
+
+@Bean
+public Step demoStep(JobRepository jobRepository, PlatformTransactionManager tx) {
+  return new StepBuilder("demoStep", jobRepository)
+      .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED, tx)
+      .build();
+}
+```
+
+#### 5. Verificación
+
+* Ejecutar un test de integración que obtenga `demoJob` del `JobRegistry` y lo lance con `JobLauncher`, validando que el estado sea `COMPLETED`.
+* Revisar en logs el registro del job (`Registering job: demoJob`).
+* Confirmar que no se generan errores `DuplicateJobException`.
+
+#### 6. Criterios de aceptación
+
+* Beans `JobRepository`, `JobLauncher` y `JobRegistry` presentes en el contexto.
+* Un único registrador de jobs activo.
+* Job de prueba ejecutable y con estado `COMPLETED`.
+
+#### 7. Notas
+
+* Evitar coexistencia de `JobRegistryBeanPostProcessor` y `JobRegistrySmartInitializingSingleton`.
+* Usar `PlatformTransactionManager` explícitamente en todos los steps (`tasklet` o `chunk`).
+
+---
+
