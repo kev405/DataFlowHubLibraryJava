@@ -10,6 +10,9 @@ spring:
       enabled: false
     jdbc:
       initialize-schema: never
+batch:
+  validation:
+    storage-path-exists: false
 server:
   port: 8080
 management:
