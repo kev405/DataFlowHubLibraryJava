@@ -1,5 +1,9 @@
 spring:
   jpa:
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 100
     hibernate:
       ddl-auto: validate
   flyway:

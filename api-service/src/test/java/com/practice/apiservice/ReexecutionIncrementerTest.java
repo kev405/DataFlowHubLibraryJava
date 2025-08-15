@@ -12,6 +12,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.batch.test.JobLauncherTestUtils;
 import org.springframework.batch.test.context.SpringBatchTest;
 
@@ -38,10 +43,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 @SpringBatchTest
 @ContextConfiguration(classes = {
         ReexecutionIncrementerTest.TestConfig.class,
-        // Importa SOLO lo necesario para el job e incrementer
-        com.practice.apiservice.config.BatchConfig.class,                 // tu DefaultBatchConfiguration
-        com.practice.apiservice.batch.DemoJobConfig.class,                // job/step/validator (usa listeners)
-        com.practice.apiservice.batch.incrementer.IncrementerConfig.class // runId / requestTime
+        com.practice.apiservice.config.BatchConfig.class,
+        com.practice.apiservice.batch.incrementer.IncrementerConfig.class
 })
 @TestPropertySource(properties = {
         "spring.batch.job.enabled=false",
@@ -80,6 +83,21 @@ class ReexecutionIncrementerTest {
         @Bean
         JobLauncherTestUtils jobLauncherTestUtils() {
             return new JobLauncherTestUtils();
+        }
+
+        /** Job simple para probar el incrementer sin dependencias complejas */
+        @Bean("demoJob")
+        Job demoJob(JobRepository jobRepository,
+                    PlatformTransactionManager tx,
+                    JobParametersIncrementer incrementer) {
+            Step simpleStep = new StepBuilder("simpleStep", jobRepository)
+                    .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED, tx)
+                    .build();
+
+            return new JobBuilder("demoJob", jobRepository)
+                    .incrementer(incrementer)
+                    .start(simpleStep)
+                    .build();
         }
     }
 
