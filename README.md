@@ -3143,3 +3143,141 @@ StepScopeTestUtils.doInStepScope(MetaDataInstanceFactory.createStepExecution(par
 
 ---
 
+## C2 – Job CSV → DB (chunk-oriented)
+
+### HU F3-08 – ItemProcessor (validación + transformación)
+
+#### 1) Objetivo
+
+Centralizar reglas de **validación** y **normalización** antes del writer. Soporta dos estrategias:
+
+* **filter**: devuelve `null` y el registro se descarta (no cuenta como *skip*).
+* **exception**: lanza `RecordValidationException`; luego el Step (F3‑10) lo contará con `.skip(...)`.
+
+---
+
+#### 2) Diseño / Configuración
+
+* **Bean**: `ImportRecordProcessor` (`@StepScope`, `ItemProcessor<ImportRecord, ImportRecord>`).
+* **Propiedades**:
+
+    * `batch.processor.validation-mode=exception|filter`
+    * `batch.processor.event-window-years=2` (ventana válida para `eventTime`).
+* **Validaciones** (ejemplos):
+
+    * `externalId`: requerido y **único en el chunk** (usa `Set` en el processor).
+    * `userEmail`: requerido + regex de email.
+    * `amount`: requerido y `>= 0`.
+    * `eventTime`: requerido, **no futuro** y dentro de la ventana.
+* **Transformaciones**:
+
+    * `userEmail` → minúsculas.
+    * `amount` → `setScale(2, HALF_UP)`.
+    * `eventTime` ya es `Instant` (UTC).
+
+---
+
+#### 3) Implementación (snippets)
+
+**Excepción de validación**
+
+```java
+public class RecordValidationException extends RuntimeException {
+  public static final class FieldError {
+    private final String field, reason;
+    public FieldError(String field, String reason) { this.field = field; this.reason = reason; }
+    public String getField()  { return field; }
+    public String getReason() { return reason; }
+  }
+  private final long rowNumber; private final List<FieldError> errors;
+  public RecordValidationException(long rowNumber, List<FieldError> errors) {
+    super("row=" + rowNumber + " errors=" + errors);
+    this.rowNumber = rowNumber; this.errors = errors;
+  }
+  public long getRowNumber() { return rowNumber; }
+  public List<FieldError> getErrors() { return errors; }
+}
+```
+
+**Processor @StepScope (extracto)**
+
+```java
+@Component
+@StepScope
+public class ImportRecordProcessor implements ItemProcessor<ImportRecord, ImportRecord> {
+  private final boolean throwOnValidation; // exception|filter
+  private final int windowYears; private final Clock clock = Clock.systemUTC();
+  private final Set<String> seenIds = new HashSet<>(); private long row = 0;
+
+  public ImportRecordProcessor(
+      @Value("${batch.processor.validation-mode:exception}") String mode,
+      @Value("${batch.processor.event-window-years:2}") int windowYears) {
+    this.throwOnValidation = !"filter".equalsIgnoreCase(mode);
+    this.windowYears = windowYears;
+  }
+
+  @Override
+  public ImportRecord process(ImportRecord in) {
+    row++;
+    var errs = new ArrayList<RecordValidationException.FieldError>();
+    // validaciones (id requerido/único, email válido, amount >= 0, fecha no futura/en ventana)
+    if (!errs.isEmpty()) {
+      if (throwOnValidation) throw new RecordValidationException(row, errs);
+      return null; // filtrado
+    }
+    in.setUserEmail(in.getUserEmail().toLowerCase());
+    in.setAmount(in.getAmount().setScale(2, RoundingMode.HALF_UP));
+    return in;
+  }
+}
+```
+
+**Listener opcional**
+
+```java
+@Component
+public class LoggingProcessListener implements ItemProcessListener<ImportRecord, ImportRecord> {
+  public void afterProcess(ImportRecord in, ImportRecord out) {
+    if (out == null) log.debug("Filtered record: externalId={}", in.getExternalId());
+  }
+}
+```
+
+---
+
+#### 4) Ejemplos prácticos
+
+* **Entrada**: `{ externalId:"A-001", userEmail:"ANA@ACME.COM", amount:"12.5", event_time:"2025-07-01T12:00:00Z" }`
+* **Salida**: `{ externalId:"A-001", userEmail:"ana@acme.com", amount:12.50, eventTime:"2025-07-01T12:00:00Z" }`
+* **Inválido**: `{ amount:-3 } → RecordValidationException(field="amount", reason="NEGATIVE")` (modo `exception`) o `null` (modo `filter`).
+
+---
+
+#### 5) Verificación (tests mínimos)
+
+* Dataset de 5–8 filas mezclando válidas/ inválidas.
+* Aserciones:
+
+    * Normalizaciones: email minúscula, escala `2` en amount.
+    * Duplicado de `externalId` dentro de chunk detectado.
+    * Comportamiento según `validation-mode`.
+
+---
+
+#### 6) Criterios de aceptación
+
+* Reglas aplicadas y documentadas; válidos avanzan al writer.
+* Inválidos se **filtran** o **generan skip** (según estrategia).
+* Tests cubren casos borde (email raro, montos con 3 decimales, fechas futuras/fuera de ventana).
+* Processor **puro** (sin I/O ni DB) para rendimiento.
+
+---
+
+#### 7) Troubleshooting
+
+* `DUPLICATED_IN_CHUNK`: revisa el tamaño de chunk según negocio.
+* Para *skip* en C3, configura el step con `.faultTolerant().skip(RecordValidationException.class).skipLimit(N)`.
+* Importa desde el **JDK**: `Clock`, `Instant`, `ChronoUnit`, `RoundingMode` (si el IDE los marca en rojo, revisa SDK/bytecode y cache del IDE).
+
+---
+
