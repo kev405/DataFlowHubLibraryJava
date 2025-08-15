@@ -3281,3 +3281,129 @@ public class LoggingProcessListener implements ItemProcessListener<ImportRecord,
 
 ---
 
+## C2 – Job CSV → DB (chunk-oriented)
+
+### HU F3-09 – ItemWriter a destino (batch insert, transacciones)
+
+#### 1) Objetivo
+
+Persistir los registros válidos del job en una tabla de **staging** mediante **inserciones por lotes** y dentro de **transacciones por chunk**, evitando duplicados en re‑ejecuciones.
+
+---
+
+#### 2) Esquema / Migración (F3)
+
+Crear tabla `import_records` y restricciones para idempotencia.
+
+```sql
+-- V3__create_import_records.sql
+create table if not exists import_records (
+  id                    uuid primary key,
+  processing_request_id uuid         not null,
+  external_id           varchar(64)  not null,
+  user_email            varchar(140) not null,
+  amount                numeric(18,2) not null,
+  event_time            timestamptz   not null,
+  created_at            timestamptz   not null default now()
+);
+
+create unique index if not exists ux_import_records_req_ext
+  on import_records (processing_request_id, external_id);
+
+create index if not exists ix_import_records_event_time
+  on import_records (event_time);
+```
+
+> Si usas otro esquema, antepón el nombre (p. ej. `data.import_records`).
+
+---
+
+#### 3) Writer (JDBC por lotes)
+
+`JdbcBatchItemWriter<ImportRecord>` con `NamedParameterJdbcTemplate` y `ON CONFLICT DO NOTHING` (PostgreSQL) para idempotencia.
+
+```java
+@Bean
+@StepScope
+public JdbcBatchItemWriter<ImportRecord> importRecordWriter(
+    DataSource dataSource,
+    @Value("#{jobParameters['processingRequestId']}") String processingRequestId) {
+  var npjt = new NamedParameterJdbcTemplate(dataSource);
+  String sql = """
+      insert into import_records (
+          id, processing_request_id, external_id, user_email, amount, event_time
+      ) values (
+          :id, :processingRequestId, :externalId, :userEmail, :amount, :eventTime
+      )
+      on conflict (processing_request_id, external_id) do nothing
+      """;
+
+  return new JdbcBatchItemWriterBuilder<ImportRecord>()
+      .namedParametersJdbcTemplate(npjt)
+      .sql(sql)
+      .assertUpdates(false) // con ON CONFLICT, algunas filas devuelven 0 updates
+      .itemSqlParameterSourceProvider(item -> new MapSqlParameterSource()
+          .addValue("id", UUID.randomUUID())
+          .addValue("processingRequestId", UUID.fromString(processingRequestId))
+          .addValue("externalId", item.getExternalId())
+          .addValue("userEmail", item.getUserEmail())
+          .addValue("amount", item.getAmount())
+          .addValue("eventTime", Timestamp.from(item.getEventTime())))
+      .build();
+}
+```
+
+**Transacciones y lotes**
+
+* `chunkSize` configurable (p. ej., `500`).
+* El `PlatformTransactionManager` del Step asegura **commit por chunk**.
+
+---
+
+#### 4) Integración en el Step
+
+```java
+@Bean
+public Step csvToJpaStep(JobRepository jobRepository,
+                         PlatformTransactionManager tx,
+                         FlatFileItemReader<ImportRecord> reader,
+                         ImportRecordProcessor processor,
+                         JdbcBatchItemWriter<ImportRecord> writer,
+                         MetricsStepListener stepListener) {
+  int chunkSize = 500; // o desde JobParameters
+  return new StepBuilder("csvToJpaStep", jobRepository)
+      .<ImportRecord, ImportRecord>chunk(chunkSize, tx)
+      .reader(reader)
+      .processor(processor)
+      .writer(writer)
+      .listener(stepListener)
+      // .faultTolerant().skip(RecordValidationException.class).skipLimit(1000)
+      .build();
+}
+```
+
+---
+
+#### 5) Ejemplo de comportamiento
+
+* Con 10k filas válidas y `chunkSize=500` ⇒ \~20 commits. `writeCount` ≈ 10000.
+* Re‑ejecutar con el mismo `processingRequestId` y mismas filas ⇒ `writeCount` ≈ 0 gracias a `ON CONFLICT` + índice único.
+
+---
+
+#### 6) Criterios de aceptación
+
+* Inserción **por lotes** funcionando; `writeCount` coincide con registros procesados.
+* Idempotencia: re‑ejecuciones con mismo `processingRequestId` **no duplican**.
+* Migración aplicada sin romper esquema existente.
+
+---
+
+#### 7) Opciones / Notas
+
+* **JPA alternativa:** `JpaItemWriter` + `hibernate.jdbc.batch_size` (más cómodo, menor throughput).
+* Ajusta `fetchSize`/`batch_size` si cambias a JPA.
+* En entornos con PK/UK distintos, sustituye `ON CONFLICT` por `MERGE` o equivalente del motor.
+
+---
+
