@@ -4,6 +4,7 @@ import com.practice.apiservice.batch.listener.LoggingJobExecutionListener;
 import com.practice.apiservice.batch.listener.MetricsStepListener;
 import com.practice.apiservice.batch.validation.CsvToJpaJobParametersValidator;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParametersIncrementer;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
@@ -27,9 +28,13 @@ public class DemoJobConfig {
     @Bean
     public Job demoJob(JobRepository jobRepository,
                        Step demoStep,
-                       LoggingJobExecutionListener jobListener) {
+                       LoggingJobExecutionListener jobListener,
+                       CsvToJpaJobParametersValidator validator,
+                       JobParametersIncrementer incrementer) {
         return new JobBuilder("demoJob", jobRepository)
+                .validator(validator)
                 .listener(jobListener)
+                .incrementer(incrementer)
                 .start(demoStep)
                 .build();
     }

@@ -28,6 +28,9 @@ class BatchInfraSmokeTest {
     void canLaunchDemoJob() throws Exception {
         Job job = jobRegistry.getJob("demoJob");
         JobParameters params = new JobParametersBuilder()
+                .addString("processingRequestId", java.util.UUID.randomUUID().toString())
+                .addString("configId", "csv_to_jpa_v1")
+                .addString("storagePath", "/tmp/test-input.csv")
                 .addLong("ts", System.currentTimeMillis()) // evita reejecución por parámetros repetidos
                 .toJobParameters();
 

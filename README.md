@@ -2884,3 +2884,139 @@ configId=csv_to_jpa_v1
 
 ---
 
+## C0 – Batch Setup & Scaffolding
+
+### HU F3-06 – Estrategia de re‑ejecución (JobParametersIncrementer)
+
+#### 1. Objetivo
+
+Permitir **re‑ejecutar** un job como **nueva JobInstance** (no restart) controlando la identidad mediante un `JobParametersIncrementer` seleccionable por propiedad.
+
+---
+
+#### 2. Estrategias soportadas
+
+* **RunIdIncrementer (por defecto)**
+
+    * Añade/actualiza `run.id` (**Long**, identificante) → cada ejecución crea **nueva JobInstance**.
+    * Útil para re‑procesos genéricos sin semántica adicional.
+* **RequestTimeIncrementer (custom)**
+
+    * Añade/actualiza `requestTime` (**Date**, identificante) con `Instant.now()`.
+    * Útil cuando se desea trazar “cuándo” se pidió el re‑proceso.
+    * Consistente con F3‑04: `requestTime` es **identificante solo si está presente**.
+
+> **Restart vs Re‑ejecución:**
+>
+> * **Restart**: mismos parámetros **identificantes** y `JobOperator.restart(executionId)` → misma `JobInstance`.
+> * **Re‑ejecución**: altera al menos un **identificante** (p. ej., `run.id` o `requestTime`) → **nueva `JobInstance`**.
+
+---
+
+#### 3. Implementación
+
+**Beans de incrementer (config seleccionable):**
+
+```java
+@Configuration
+public class IncrementerConfig {
+  @Bean
+  @ConditionalOnProperty(name = "batch.incrementer", havingValue = "runId", matchIfMissing = true)
+  public JobParametersIncrementer runIdIncrementer() { return new RunIdIncrementer(); }
+
+  @Bean
+  @ConditionalOnProperty(name = "batch.incrementer", havingValue = "requestTime")
+  public JobParametersIncrementer requestTimeIncrementer() { return new RequestTimeIncrementer(); }
+}
+```
+
+**Asociación al job:**
+
+```java
+@Bean
+public Job demoJob(JobRepository jobRepository,
+                   Step demoStep,
+                   JobParametersIncrementer incrementer,
+                   CsvToJpaJobParametersValidator validator,
+                   LoggingJobExecutionListener jobListener) {
+  return new JobBuilder("demoJob", jobRepository)
+      .validator(validator)
+      .listener(jobListener)
+      .incrementer(incrementer)
+      .start(demoStep)
+      .build();
+}
+```
+
+**Propiedades (por perfil):**
+
+```properties
+# Default: nueva instancia con run.id
+batch.incrementer=runId
+# Alternativa semántica:
+# batch.incrementer=requestTime
+```
+
+---
+
+#### 4. Pruebas (patrón recomendado)
+
+* Usar **H2** embebida y `spring.batch.jdbc.initialize-schema=always`.
+* Desactivar Flyway y auto‑lanzamiento de jobs.
+* Registrar un `MeterRegistry` simple si hay listeners con métricas.
+* **Importante:** `JobLauncherTestUtils.launchJob(params)` **no aplica** el incrementer. Para el segundo lanzamiento, **aplícalo manualmente** o usa `JobOperator.startNextInstance(jobName)`.
+
+**Snippet base:**
+
+```java
+JobParameters base = new JobParametersBuilder()
+    .addString("processingRequestId", UUID.randomUUID().toString())
+    .addString("configId", "csv_to_jpa_v1")
+    .addString("storagePath", "/tmp/input.csv")
+    .toJobParameters();
+
+JobExecution first = utils.launchJob(base);
+JobParameters next = incrementer.getNext(base); // run.id o requestTime
+JobExecution second = utils.launchJob(next);
+```
+
+**Properties típicas de test:**
+
+```properties
+spring.batch.job.enabled=false
+spring.batch.jdbc.initialize-schema=always
+spring.flyway.enabled=false
+# H2 en memoria, si el test usa Spring Boot Test
+spring.datasource.url=jdbc:h2:mem:batchtest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+```
+
+---
+
+#### 5. Verificación
+
+* Dos lanzamientos consecutivos con el incrementer producen **JobInstance distintas** (`BATCH_JOB_INSTANCE` crece +1).
+* Ambos `JobExecution` finalizan con `ExitStatus.COMPLETED`.
+* En logs/metrics se distinguen ambas ejecuciones (listeners de F3‑03).
+
+---
+
+#### 6. Criterios de aceptación (CA)
+
+* La estrategia de incrementer se puede elegir por propiedad (`batch.incrementer`).
+* El job aplica `incrementer(...)` y crea **nueva `JobInstance`** cuando corresponde.
+* Existen pruebas que demuestran: (a) re‑ejecución crea nueva instancia, (b) restart mantiene la misma instancia.
+* README y `docs/JobParametersSpec.md` actualizados (relación con `requestTime`).
+
+---
+
+#### 7. Troubleshooting
+
+* **JobInstanceAlreadyComplete**: estás re‑lanzando con los **mismos** identificantes. Aplica `incrementer.getNext(base)` o usa `startNextInstance`.
+* **Contexto de test no levanta**: usa contexto mínimo, registra `MeterRegistry` y `@ComponentScan` para listeners.
+* **Duplicado de registradores**: no mezclar `JobRegistryBeanPostProcessor` y `JobRegistrySmartInitializingSingleton` (ver F3‑02).
+
+---
+
