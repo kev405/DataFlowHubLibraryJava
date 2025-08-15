@@ -3020,3 +3020,126 @@ spring.datasource.password=
 
 ---
 
+## C2 – Job CSV → DB (chunk-oriented)
+
+### HU F3-07 – ItemReader CSV parametrizado (@StepScope)
+
+#### 1) Objetivo
+
+Exponer un **ItemReader** streaming para CSV que se parametriza en tiempo de ejecución con `storagePath` y `delimiter`, mapea cada línea a un POJO y valida el **header**.
+
+---
+
+#### 2) Diseño / Configuración
+
+* **POJO** (`ImportRecord`): `externalId:String`, `userEmail:String`, `amount:BigDecimal`, `eventTime:Instant` (y `meta:Map<String,String>` opcional).
+* **Reader**: `FlatFileItemReader<ImportRecord>` **@StepScope** con parámetros inyectados:
+
+    * `@Value("#{jobParameters['storagePath']}") String storagePath`
+    * `@Value("#{jobParameters['delimiter']?:','}") String delimiter`
+* **Header**: `linesToSkip=1` + `SkippedLinesCallback` que verifica el encabezado esperado.
+* **Tokenizer**: `DelimitedLineTokenizer` con `setNames("external_id","user_email","amount","event_time")` y `setDelimiter(delimiter)`.
+* **Mapper de campos**: `ImportRecordFieldSetMapper` (parsea `BigDecimal` e `Instant` ISO‑8601).
+* **Strict mode**: `reader.setStrict(true)` para fallar si el archivo no existe (si prefieres validar en F3‑05, pon `false`).
+* El `FlatFileItemReader` lee en **streaming** (no carga todo a memoria).
+
+---
+
+#### 3) Implementación (snippets)
+
+**Bean del reader**
+
+```java
+@Bean
+@StepScope
+public FlatFileItemReader<ImportRecord> importRecordReader(
+    @Value("#{jobParameters['storagePath']}") String storagePath,
+    @Value("#{jobParameters['delimiter']?:','}") String delimiter) {
+  var reader = new FlatFileItemReader<ImportRecord>();
+  reader.setName("importRecordReader");
+  reader.setResource(new FileSystemResource(storagePath));
+  reader.setStrict(true);
+  reader.setLinesToSkip(1);
+  reader.setSkippedLinesCallback(line -> {
+    String expected = "external_id,user_email,amount,event_time";
+    if (!expected.equals(line)) throw new FlatFileParseException(
+        "Invalid header. Expected: " + expected + " but was: " + line, line, 1);
+  });
+  var tokenizer = new DelimitedLineTokenizer();
+  tokenizer.setDelimiter(delimiter);
+  tokenizer.setQuoteCharacter('"');
+  tokenizer.setStrict(true);
+  tokenizer.setNames("external_id","user_email","amount","event_time");
+  var mapper = new DefaultLineMapper<ImportRecord>();
+  mapper.setLineTokenizer(tokenizer);
+  mapper.setFieldSetMapper(new ImportRecordFieldSetMapper());
+  mapper.afterPropertiesSet();
+  reader.setLineMapper(mapper);
+  return reader;
+}
+```
+
+**Mapper de campos (extracto)**
+
+```java
+public class ImportRecordFieldSetMapper implements FieldSetMapper<ImportRecord> {
+  public ImportRecord mapFieldSet(FieldSet fs) {
+    var amount = Optional.ofNullable(fs.readString("amount"))
+        .filter(s -> !s.isBlank()).map(BigDecimal::new).orElse(null);
+    var time = Optional.ofNullable(fs.readString("event_time"))
+        .filter(s -> !s.isBlank()).map(Instant::parse).orElse(null);
+    return new ImportRecord(
+        fs.readString("external_id"), fs.readString("user_email"), amount, time);
+  }
+}
+```
+
+**Test recomendado**
+
+* Crear archivo temporal con header esperado y 2–3 filas.
+* Inyectar parámetros con `StepScopeTestUtils.doInStepScope(...)` y leer con `reader.read()` hasta `null`.
+
+```java
+JobParameters params = new JobParametersBuilder()
+  .addString("storagePath", tmpFile.toString())
+  .addString("delimiter", ",")
+  .toJobParameters();
+
+StepScopeTestUtils.doInStepScope(MetaDataInstanceFactory.createStepExecution(params), () -> {
+  reader.open(new ExecutionContext());
+  var r1 = reader.read(); var r2 = reader.read(); var r3 = reader.read();
+  reader.close();
+  assertThat(r1.getExternalId()).isEqualTo("A1");
+  assertThat(r2).isNotNull();
+  assertThat(r3).isNull();
+  return null;
+});
+```
+
+---
+
+#### 4) Verificación
+
+* Con un CSV de muestra, el reader **lee >100k filas** en tiempo aceptable (definir objetivo) **sin picos de memoria**.
+* Si el archivo no existe o el header es inválido → error **claro** en logs.
+* El delimiter es configurable: por defecto `,`; si se pasa `;` en parámetros, se parsea correctamente.
+
+---
+
+#### 5) Criterios de aceptación
+
+* Bean `FlatFileItemReader<ImportRecord>` anotado con **@StepScope** y parámetros inyectados.
+* **Header validado** y mapeo correcto a `ImportRecord` (incluye `BigDecimal`/`Instant`).
+* Lectura streaming (sin OOM) en archivos grandes.
+* Test de integración del reader en verde.
+
+---
+
+#### 6) Notas / Troubleshooting
+
+* Si el CSV tiene comillas/escapes complejos, considera usar **OpenCSV** o **Commons CSV** dentro del `FieldSetMapper` (se mantiene el `FlatFileItemReader`).
+* Integración con F3‑05: el **validator** puede verificar existencia de `storagePath` y dominio de `delimiter` antes de abrir el reader.
+* Para trabajar con Windows, valida encoding/line endings si el header no coincide.
+
+---
+
