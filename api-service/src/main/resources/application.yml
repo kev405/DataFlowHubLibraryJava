@@ -13,6 +13,7 @@ spring:
 batch:
   validation:
     storage-path-exists: false
+  incrementer: runId
 server:
   port: 8080
 management:
