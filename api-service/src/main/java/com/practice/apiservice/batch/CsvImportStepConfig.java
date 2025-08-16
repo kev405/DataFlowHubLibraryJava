@@ -2,13 +2,18 @@ package com.practice.apiservice.batch;
 
 import com.practice.apiservice.batch.listener.MetricsStepListener;
 import com.practice.apiservice.batch.processor.ImportRecordProcessor;
+import com.practice.apiservice.batch.processor.RecordValidationException;
+import com.practice.apiservice.batch.skip.ImportSkipListener;
 import com.practice.apiservice.model.ImportRecord;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.core.StepExecutionListener;
+import org.springframework.batch.core.ChunkListener;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +31,9 @@ public class CsvImportStepConfig {
             ImportRecordProcessor importRecordProcessor,            // F3-08
             JdbcBatchItemWriter<ImportRecord> importRecordWriter,   // F3-09
             MetricsStepListener stepListener,                       // C0-F3-03
-            @Value("#{jobParameters['chunkSize'] ?: 500}") Integer chunkSize
+            @Value("#{jobParameters['chunkSize'] ?: 500}") Integer chunkSize,
+            ImportSkipListener skipListener,
+            @Value("${batch.csv.skip-limit:1000}") int skipLimit
     ) {
         return new StepBuilder("csvImportStep", jobRepository)
                 .<ImportRecord, ImportRecord>chunk(chunkSize, tx)
@@ -34,6 +41,13 @@ public class CsvImportStepConfig {
                 .processor(importRecordProcessor)
                 .writer(importRecordWriter)
                 .listener(stepListener)
+                .listener((StepExecutionListener) importRecordProcessor)  // Explicit casting
+                .listener((ChunkListener) importRecordProcessor)          // Explicit casting
+                .faultTolerant()
+                .skip(RecordValidationException.class)
+                .skip(FlatFileParseException.class)
+                .skipLimit(skipLimit)
+                .listener(skipListener)
                 // NOTE: faultTolerant() lo activaremos en C3 (skip/retry).
                 .build();
     }

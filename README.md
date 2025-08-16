@@ -3608,3 +3608,145 @@ class CsvToJpaJobE2ETest {
 
 ---
 
+## C3 – Tolerancia a fallos en el flujo CSV → DB
+
+### HU F3-11 – Skips controlados de filas inválidas (fault-tolerant)
+
+#### 1) Objetivo
+
+Permitir que el job continúe cuando encuentra filas inválidas en el CSV, **saltándolas** (skip) de forma controlada, registrando el motivo y, opcionalmente, **persistiendo** el error para análisis posterior.
+
+---
+
+#### 2) Diseño / Componentes
+
+* **Tabla de errores** (`import_errors`): almacena por `processing_request_id` las filas saltadas y la razón.
+* **Sink** de errores (`ImportErrorSink`): inserta en `import_errors` (simple DAO con `NamedParameterJdbcTemplate`).
+* **SkipListener** (`ImportSkipListener`): reacciona a skips en read/process/write, loguea en JSON y delega al sink (configurable por propiedad).
+* **Step** fault-tolerant: activa `skip(...)` y `skipLimit(K)` para tipos de error conocidos.
+* **Processor**: ante datos inválidos **lanza** `RecordValidationException` (no retorna `null`) para que cuente como *skip*.
+
+---
+
+#### 3) Esquema SQL (migración)
+
+`V4__create_import_errors.sql`
+
+```sql
+CREATE TABLE IF NOT EXISTS import_errors (
+  id BIGSERIAL PRIMARY KEY,
+  processing_request_id UUID NOT NULL,
+  row_num BIGINT NULL,
+  external_id VARCHAR(128) NULL,
+  reason TEXT NOT NULL,
+  raw_line TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_import_errors_req ON import_errors (processing_request_id);
+CREATE INDEX IF NOT EXISTS ix_import_errors_external ON import_errors (external_id);
+```
+
+---
+
+#### 4) Propiedades de configuración
+
+```yaml
+batch:
+  csv:
+    skip-limit: 1000     # límite de filas a saltar por ejecución
+    persist-errors: true # si false, sólo se loguea; no se inserta en BD
+```
+
+> Se pueden sobreescribir por perfil/entorno (p. ej. `application-test.yml`).
+
+---
+
+#### 5) Listener de skip (resumen funcional)
+
+* **onSkipInRead**: captura `FlatFileParseException` (número de línea + raw).
+* **onSkipInProcess**: captura `RecordValidationException` (número de línea y detalle de validación).
+* **onSkipInWrite**: registra fallo al escribir una fila específica.
+* **Logs**: eventos estructurados (`skip_in_read`, `skip_in_process`, `skip_in_write`) con `processingRequestId`, `row`, `externalId`, `reason`.
+* **Persistencia**: si `batch.csv.persist-errors=true`, inserta en `import_errors`.
+
+---
+
+#### 6) Configuración del Step (fault-tolerant)
+
+Fragmento clave de `csvImportStep`:
+
+```java
+return new StepBuilder("csvImportStep", jobRepository)
+  .<ImportRecord, ImportRecord>chunk(chunkSize, tx)
+  .reader(reader)
+  .processor(processor)   // lanzar RecordValidationException ante inválidos
+  .writer(writer)
+  .faultTolerant()
+  .skip(RecordValidationException.class)
+  .skip(FlatFileParseException.class)
+  .skipLimit(skipLimit)  // from ${batch.csv.skip-limit}
+  .listener(importSkipListener)
+  .build();
+```
+
+> **Processor @StepScope**: se añadió **constructor por defecto** para facilitar la creación del proxy: `public ImportRecordProcessor(){ this("exception", 2, Clock.systemUTC()); }`.
+
+---
+
+#### 7) Endpoint y comportamiento
+
+* El endpoint existente `POST /jobs/{configId}/run` **no cambia**.
+* Con `skip` activado, el job finaliza **COMPLETED** aunque existan filas inválidas ≤ `skip-limit`.
+* Se incrementan las métricas y contadores de step: `readCount`, `writeCount`, `skipCount` y `process/read/writeSkipCount`.
+
+---
+
+#### 8) Pruebas
+
+**Unit – `ImportSkipListenerTest`**
+
+* Fuerza `RecordValidationException` y verifica que se llama a `jdbc.update(...)` con parámetros esperados (cuando `persist-errors=true`).
+* Se puede inyectar `processingRequestId` vía `ReflectionTestUtils`.
+
+**Integración – `CsvSkipIT`**
+
+* CSV con 3 filas (2 válidas, 1 inválida) ⇒ esperar `readCount=3`, `writeCount=2`, `skipCount=1`.
+* Usa Postgres (Testcontainers) **o** H2 modo PostgreSQL. Asegura el **esquema Batch correcto**:
+
+    * Opción A (recomendada para IT): `spring.batch.jdbc.initialize-schema=always` y `spring.flyway.enabled=false` (el test no toca `BATCH_*`).
+    * Opción B (si gestionas `BATCH_*` con Flyway): mantén el DDL alineado a tu versión de Spring Batch (ej. `BATCH_STEP_EXECUTION.CREATE_TIME` existe en 5.x).
+
+---
+
+#### 9) Verificación manual
+
+1. Ejecutar el job con un CSV que incluya una fila inválida (email, amount o fecha).
+2. Confirmar en logs los eventos `skip_*` con contexto.
+3. Consultar `import_errors` filtrando por `processing_request_id` y validar la/s fila/s persistidas.
+
+---
+
+#### 10) Criterios de aceptación
+
+* El job continúa hasta **COMPLETED** cuando encuentra errores de parseo/validación dentro del `skip-limit`.
+* Cada fila inválida queda **trazada** (log JSON) y **persistida** si está habilitado.
+* Los contadores `skipCount` y métricas asociadas reflejan correctamente los skips.
+
+---
+
+#### 11) Troubleshooting
+
+* **`BadSqlGrammar` en tablas `BATCH_*`**: desalineación de esquema. En IT usa `initialize-schema=always` **o** carga los scripts oficiales `schema-postgresql.sql`. Evita mezclar DDL antiguo (columnas `PARAMETER_NAME/...`).
+* **`Ambiguous mapping` en endpoints**: mantener un único `POST /jobs/{configId}/run`.
+* **No incrementa `skipCount`**: el processor está devolviendo `null` en vez de **lanzar** `RecordValidationException`.
+* **`processingRequestId` nulo en listener**: verificar `@StepScope`/`@Scope("step")` y que el parámetro venga en `JobParameters`.
+
+---
+
+#### 12) Notas de operación
+
+* En **producción**: `spring.batch.jdbc.initialize-schema=never`. Las tablas `BATCH_*` deben existir (migración Flyway acorde a la versión usada).
+* Ajusta `skip-limit` por configuración según criticidad de datos. Si esperas picos de errores, monitorea con métricas y alerta cuando supere umbral.
+
+---
+
