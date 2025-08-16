@@ -33,6 +33,11 @@ public class ImportRecordProcessor implements ItemProcessor<ImportRecord, Import
     private final Set<String> seenIds = new HashSet<>();
     private long row = 0;
 
+    // Constructor por defecto necesario para @StepScope
+    public ImportRecordProcessor() {
+        this("exception", 2, Clock.systemUTC());
+    }
+
     public ImportRecordProcessor(
             @Value("${batch.processor.validation-mode:exception}") String mode,
             @Value("${batch.processor.event-window-years:2}") int windowYears) {

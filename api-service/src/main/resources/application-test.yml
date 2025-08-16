@@ -14,3 +14,7 @@ logging:
   level:
     root: WARN   # menos ruido en tests
     org.springframework: WARN
+
+batch:
+  csv:
+    skip-limit: 10
