@@ -3407,3 +3407,204 @@ public Step csvToJpaStep(JobRepository jobRepository,
 
 ---
 
+## C2 – Job CSV → DB (chunk-oriented)
+
+### HU F3-10 – Ensamblaje Step + Job + Endpoint (E2E)
+
+#### 1) Objetivo
+
+Integrar los componentes de la épica C2 para ejecutar el flujo **CSV → Processor → Writer → DB** de punta a punta, exponer un **endpoint** para lanzarlo con `JobParameters` y agregar un **test E2E** estable sobre Postgres.
+
+---
+
+#### 2) Ensamblaje del Step (chunk)
+
+* **Bean:** `csvImportStep` (**@JobScope** para leer `chunkSize` desde `JobParameters`).
+* **Cadena:** `FlatFileItemReader<ImportRecord>` (F3‑07) → `ImportRecordProcessor` (F3‑08) → `JdbcBatchItemWriter<ImportRecord>` (F3‑09).
+* **Transacciones:** `chunk(chunkSize, tx)` ⇒ commit por chunk.
+
+```java
+@Bean
+@JobScope
+public Step csvImportStep(JobRepository jobRepository,
+                          PlatformTransactionManager tx,
+                          FlatFileItemReader<ImportRecord> reader,
+                          ImportRecordProcessor processor,
+                          JdbcBatchItemWriter<ImportRecord> writer,
+                          MetricsStepListener stepListener,
+                          @Value("#{jobParameters['chunkSize'] ?: 500}") Integer chunkSize) {
+  return new StepBuilder("csvImportStep", jobRepository)
+      .<ImportRecord, ImportRecord>chunk(chunkSize, tx)
+      .reader(reader).processor(processor).writer(writer)
+      .listener(stepListener)
+      // .faultTolerant().skip(RecordValidationException.class).skipLimit(1000) (C3)
+      .build();
+}
+```
+
+> **Nota:** Se añadió **constructor por defecto** en `ImportRecordProcessor` para facilitar el proxy de **@StepScope**:
+>
+> ```java
+> public ImportRecordProcessor() { this("exception", 2, Clock.systemUTC()); }
+> ```
+
+---
+
+#### 3) Definición del Job
+
+* **Bean:** `csvToJpaJob` con **validator** (F3‑05), **incrementer** (F3‑06) y **JobExecutionListener** (F3‑03).
+
+```java
+@Bean
+public Job csvToJpaJob(JobRepository jobRepository,
+                       Step csvImportStep,
+                       LoggingJobExecutionListener jobListener,
+                       JobParametersValidator csvToJpaJobParametersValidator,
+                       JobParametersIncrementer jobParametersIncrementer) {
+  return new JobBuilder("csvToJpaJob", jobRepository)
+      .listener(jobListener)
+      .validator(csvToJpaJobParametersValidator)
+      .incrementer(jobParametersIncrementer)
+      .start(csvImportStep)
+      .build();
+}
+```
+
+---
+
+#### 4) Endpoint de ejecución
+
+* **Ruta:** `POST /jobs/{configId}/run`
+* **Cuerpo (ejemplo):**
+
+```json
+{
+  "processingRequestId": "3ce58614-88ea-46e2-9eea-fe2c5e3b8902",
+  "storagePath": "/tmp/sample.csv",
+  "delimiter": ",",
+  "chunkSize": 500,
+  "requestTime": "2025-07-01T12:00:00Z"
+}
+```
+
+* **Respuesta:** `{ jobExecutionId, status }`
+
+```java
+@RestController
+@RequestMapping("/jobs")
+public class JobController {
+  private final JobLauncher jobLauncher; private final Job csvToJpaJob;
+  @PostMapping("/{configId}/run")
+  public ResponseEntity<?> runJob(@PathVariable String configId,
+                                  @RequestBody RunJobRequest req) throws Exception {
+    var params = new JobParametersBuilder()
+        .addString("configId", configId)
+        .addString("processingRequestId", req.processingRequestId())
+        .addString("storagePath", req.storagePath())
+        .addString("delimiter", req.delimiter() == null ? "," : req.delimiter())
+        .addLong("chunkSize", req.chunkSize() == null ? 500L : req.chunkSize().longValue())
+        .addInstant("requestTime", req.requestTime() == null ? Instant.now() : req.requestTime())
+        .toJobParameters();
+    var exec = jobLauncher.run(csvToJpaJob, params);
+    return ResponseEntity.ok(Map.of("jobExecutionId", exec.getId(), "status", exec.getStatus().toString()));
+  }
+}
+```
+
+> **Importante:** Se unificó el endpoint para evitar *Ambiguous mapping* con otro controller previo.
+
+---
+
+#### 5) Parámetros requeridos
+
+* `configId` *(string estable, p. ej. `csv_to_jpa_v1`)*
+* `processingRequestId` *(UUID – identifica re‑ejecuciones)*
+* `storagePath` *(ruta CSV)*
+* `delimiter` *(default `,`)*
+* `chunkSize` *(default `500`)*
+* `requestTime` *(Instant – útil para incrementer custom)*
+
+---
+
+#### 6) Test E2E (Postgres + Testcontainers)
+
+**Objetivo:** validar el ensamblaje end‑to‑end con base real y migraciones de negocio vía Flyway.
+
+**Puntos clave del test**
+
+* `@SpringBootTest(webEnvironment=NONE)` para no levantar capa web.
+* **Testcontainers Postgres** con `@ServiceConnection` (campo **static**).
+* **Esquema Spring Batch controlado desde el test** para evitar desfases de versión:
+
+    * Desactivar `initialize-schema` de Batch en el test (`never`).
+    * Ejecutar explícitamente los scripts oficiales:
+      `org/springframework/batch/core/schema-drop-postgresql.sql` y
+      `org/springframework/batch/core/schema-postgresql.sql` con `ResourceDatabasePopulator` en `@BeforeAll`.
+* **Flyway** aplica *solo* migraciones de negocio (`db/migration`), *no* debe contener `BATCH_*`.
+
+```java
+@SpringBootTest(
+  webEnvironment = SpringBootTest.WebEnvironment.NONE,
+  properties = {
+    "spring.batch.job.enabled=false",
+    "spring.flyway.enabled=true",
+    "spring.flyway.locations=classpath:db/migration",
+    "spring.batch.jdbc.initialize-schema=never",
+    "spring.jpa.hibernate.ddl-auto=none"
+  }
+)
+@SpringBatchTest
+@Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class CsvToJpaJobE2ETest {
+  @Container @ServiceConnection
+  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+      .withDatabaseName("e2e_" + System.nanoTime());
+
+  @Autowired DataSource dataSource; @Autowired JobLauncherTestUtils utils; @Autowired Job csvToJpaJob;
+
+  @BeforeAll
+  void initBatchSchema() {
+    var pop = new ResourceDatabasePopulator();
+    pop.setContinueOnError(true); pop.setIgnoreFailedDrops(true);
+    pop.addScript(new ClassPathResource("org/springframework/batch/core/schema-drop-postgresql.sql"));
+    pop.addScript(new ClassPathResource("org/springframework/batch/core/schema-postgresql.sql"));
+    DatabasePopulatorUtils.execute(pop, dataSource);
+  }
+}
+```
+
+---
+
+#### 7) Verificación
+
+* Ejecutar el test E2E: estado final **COMPLETED**.
+* `readCount ≥ writeCount` y sin duplicados para el mismo `processingRequestId` (gracias a `ON CONFLICT`).
+* Logs incluyen inicio/fin de job con `executionId` y métricas expuestas en Actuator (si está habilitado).
+
+---
+
+#### 8) Criterios de aceptación
+
+* El job `csvToJpaJob` ejecuta el flujo CSV→DB con parámetros inyectados.
+* Endpoint disponible y sin conflictos de mapeo.
+* Test E2E estable en Postgres con esquema Batch **alineado** a la versión usada.
+
+---
+
+#### 9) Troubleshooting
+
+* **Ambiguous mapping / 2 endpoints iguales:** unificar controller o cambiar ruta base.
+* **`BadSqlGrammar` sobre `BATCH_*`:** no mezclar DDL de Batch en Flyway de test; usar scripts oficiales o `initialize-schema=always` (no ambos). Asegurar BD limpia por corrida.
+* **`configId is required`:** falta parámetro exigido por el validator (F3‑05).
+* **`ImportRecordProcessor` en rojo/`@StepScope`:** agregar constructor por defecto, revisar SDK/bytecode en el IDE.
+
+---
+
+#### 10) Notas
+
+* En **producción**: `spring.batch.jdbc.initialize-schema=never` y crear `BATCH_*` con Flyway usando el **DDL de la versión actual de Spring Batch**.
+* Tamaño de `chunk` configurable por parámetro o propiedad (`batch.csv.chunk-size`).
+
+---
+
