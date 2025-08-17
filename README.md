@@ -3750,3 +3750,175 @@ return new StepBuilder("csvImportStep", jobRepository)
 
 ---
 
+### HU F3-12 – Reintentos con Backoff exponencial (retry + backoff)
+
+#### 1) Objetivo
+
+Añadir tolerancia a fallos transitorios del job **CSV → DB** mediante **reintentos** con **backoff exponencial** y métricas de observabilidad. La ejecución debe:
+
+* Reintentar ante errores transitorios (locks, timeouts, caídas breves de DB).
+* Respetar un límite de intentos configurable y un backoff exponencial (initial, multiplier, max).
+* Exponer métricas de reintentos por step.
+
+---
+
+#### 2) Dependencias
+
+* `spring-boot-starter-batch` (incluye Spring Retry como dependencia transitiva en Boot 3.x). Si fuera necesario:
+
+  ```xml
+  <dependency>
+    <groupId>org.springframework.retry</groupId>
+    <artifactId>spring-retry</artifactId>
+  </dependency>
+  ```
+* Micrometer/Actuator para métricas.
+
+---
+
+#### 3) Propiedades (por defecto)
+
+```yaml
+batch:
+  csv:
+    retry:
+      limit: 3        # número máximo de reintentos (además del primer intento)
+      initial: 200ms  # backoff inicial
+      multiplier: 2.0 # multiplicador del backoff
+      max: 1s         # tope máximo del backoff
+```
+
+> Estas propiedades se enlazan a `RetryProperties` mediante `@ConfigurationProperties("batch.csv.retry")`.
+
+---
+
+#### 4) Configuración técnica
+
+**4.1 `RetryProperties` + `RetryConfig`**
+
+* `RetryProperties` encapsula `limit`, `initial`, `multiplier`, `max`.
+* `RetryConfig` expone un `ExponentialBackOffPolicy` configurado con dichas propiedades.
+
+**4.2 Listener de métricas (no deprecado)**
+
+* Implementar `RetryListener` (no usar `RetryListenerSupport`, deprecado).
+* Incrementa contador Micrometer por intento de retry:
+
+    * `dataflow.step.retry.attempts{step, exception}`
+
+**4.3 Hook en el Step**
+En el builder de `csvImportStep`:
+
+```java
+.faultTolerant()
+  // RETRY
+  .retry(org.springframework.dao.TransientDataAccessException.class)
+  .retry(java.sql.SQLTransientConnectionException.class)  // opcional
+  .retry(java.net.SocketTimeoutException.class)           // opcional
+  .retryLimit(retryProps.getLimit())
+  .backOffPolicy(csvRetryBackoff)
+  .listener(retryMetricsListener)
+
+  // SKIP (de F3-11)
+  .skip(RecordValidationException.class)
+  .skipLimit(1000)
+```
+
+> Nota deprecations: sustituimos `DeadlockLoserDataAccessException` por `TransientDataAccessException`.
+> Opcional: inspeccionar `SQLException.getSQLState()` (Postgres: `40P01` deadlock, `40001` serialization, `55P03` lock not available) si se requiere granularidad.
+
+---
+
+#### 5) Pruebas automatizadas
+
+**5.1 Éxito tras reintentos (`RetryPolicyIT`)**
+
+* Contexto mínimo (sin MVC/Security) y H2 para metadatos de Batch:
+
+  ```properties
+  spring.datasource.url=jdbc:h2:mem:retryok;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+  spring.batch.jdbc.initialize-schema=always
+  spring.flyway.enabled=false
+  spring.batch.job.enabled=false
+  spring.main.web-application-type=none
+  spring.autoconfigure.exclude=\
+    org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,\
+    org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration,\
+    org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration
+  spring.main.allow-bean-definition-overriding=true
+  batch.csv.retry.limit=3
+  batch.csv.retry.initial=100ms
+  batch.csv.retry.multiplier=2.0
+  batch.csv.retry.max=1s
+  ```
+* Inyectar un `@Primary ItemWriter` de prueba que falle 2 veces con `ConcurrencyFailureException` y a la 3ª sea OK. El job debe terminar **COMPLETED**.
+
+**5.2 Límite agotado (`RetryPolicyExhaustedIT`)**
+
+* Mismos ajustes, pero `limit=2` y un writer que **siempre** falla con `ConcurrencyFailureException`. El job debe terminar **FAILED**.
+
+**5.3 Consideraciones**
+
+* Mantener idempotencia del writer (UPSERT/`ON CONFLICT`) para evitar duplicados en reintentos.
+* Si combinas retry + skip, las excepciones declaradas en `skip(...)` no deben considerarse retryables.
+
+---
+
+#### 6) Observabilidad
+
+* **Métricas**:
+
+    * `dataflow.step.retry.attempts{step, exception}` – contador de intentos de retry por step.
+    * Reutilizar listeners de F3‑03 para `dataflow.step.duration`, `reads`, `writes`, `skips`.
+* **Logs**:
+
+    * Incluir `step`, `retryCount`, `exception` en logs estructurados para troubleshooting.
+
+---
+
+#### 7) Verificación manual
+
+1. Ejecutar el job con un CSV que provoque un fallo transitorio (simulado o real) y comprobar:
+
+    * Que el step retrasa los reintentos (observa los timestamps) respetando `initial/multiplier/max`.
+    * Que el job termina **COMPLETED** si el fallo cede antes del `limit`.
+2. Forzar que el fallo persista para confirmar **FAILED** al agotar el límite.
+3. Revisar `/actuator/metrics` para ver los contadores de retry.
+
+---
+
+#### 8) Criterios de aceptación
+
+* `csvImportStep` aplica retry + backoff configurables vía propiedades.
+* Listener `RetryMetricsListener` registra intentos en Micrometer.
+* Pruebas cubren caso **COMPLETED** tras reintentos y **FAILED** al agotar límite.
+* No se usan clases deprecadas (`RetryListenerSupport`, `DeadlockLoserDataAccessException`).
+
+---
+
+#### 9) Troubleshooting
+
+* **Fallos al cargar ApplicationContext en tests**: excluir `WebMvcAutoConfiguration` y `Security*AutoConfiguration`, y activar `spring.main.allow-bean-definition-overriding=true` para permitir el writer de prueba `@Primary`.
+* **Columnas `BATCH_*` inexistentes**: asegúrate de `spring.batch.jdbc.initialize-schema=always` (en tests). No mezclar con migraciones Flyway del dominio.
+* **Reintentos duplican inserciones**: garantizar idempotencia/UPSERT en el writer o transacciones por chunk.
+* **Granularidad por SQLState**: si se requiere, crear política que filtre por `SQLException.getSQLState()` (p. ej. `40P01`, `40001`, `55P03`).
+
+---
+
+#### 10) Ejemplo de ejecución
+
+```bash
+curl -X POST "http://localhost:8080/jobs/csv_to_jpa_v1/run" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "processingRequestId": "'"$(uuidgen)"'",
+        "storagePath": "/data/imports/input.csv",
+        "delimiter": ",",
+        "chunkSize": 500
+      }'
+```
+
+> Si la API no está habilitada en el perfil de test, ejecuta con `JobLauncher` embebido o usa `JobParameters` desde CLI.
+
+---
+

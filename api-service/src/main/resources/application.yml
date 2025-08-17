@@ -17,6 +17,11 @@ batch:
   csv:
     skip-limit: 1000
     persist-errors: true
+    retry:
+      limit: 3
+      initial: 200ms
+      multiplier: 2.0
+      max: 1s
 server:
   port: 8080
 management:
