@@ -3922,3 +3922,103 @@ curl -X POST "http://localhost:8080/jobs/csv_to_jpa_v1/run" \
 
 ---
 
+## HU F3-14 – ExecutionContext (checkpoint del reader/step)
+
+### 1) Objetivo
+
+Habilitar **reanudación segura (restart)** de los jobs: que el **reader** retome desde el *último chunk confirmado* usando `ExecutionContext`, evitando relecturas y duplicados.
+
+---
+
+### 2) Diseño / Configuración
+
+* **Reader estándar (FlatFileItemReader)**
+
+    * Declarar el bean como **@StepScope** y activar persistencia de estado:
+
+        * `reader.setSaveState(true)`
+        * `reader.setName("csvReader")`  ← clave del estado en la tabla de metadatos de Spring Batch.
+* **Reader custom** (si no usas FlatFileItemReader): implementar **`ItemStream`** y gestionar explícitamente el cursor.
+* **Scope**: todos los beans que lean **JobParameters** deben ser `@StepScope` (el checkpoint ocurre al final de cada transacción de chunk).
+
+---
+
+### 3) Implementación (snippets)
+
+**3.1 FlatFileItemReader con estado**
+
+```java
+@Bean
+@StepScope
+public FlatFileItemReader<ImportRecord> importRecordReader(
+    @Value("#{jobParameters['storagePath']}") String storagePath,
+    @Value("#{jobParameters['delimiter']?:','}") String delimiter) {
+  var r = new FlatFileItemReader<ImportRecord>();
+  r.setName("csvReader");           // ← clave de checkpoint
+  r.setSaveState(true);              // ← persistir posición
+  r.setResource(new FileSystemResource(storagePath));
+  // ... tokenizer/mapper/validación de header como en F3-07
+  return r;
+}
+```
+
+**3.2 Reader custom que implementa ItemStream**
+
+```java
+public class StatefulCsvReader implements ItemReader<Record>, ItemStream {
+  private BufferedReader br; private long line = 0; // datos → tu cursor
+
+  @Override public void open(ExecutionContext ctx) {
+    this.line = ctx.getLong("current.line", 0L);
+    this.br = Files.newBufferedReader(path, UTF_8);
+    // saltar header y reposicionar
+    long toSkip = Math.max(0, line);
+    for (long i = 0; i < toSkip; i++) br.readLine();
+  }
+  @Override public Record read() { /* lee 1 línea → map */ }
+  @Override public void update(ExecutionContext ctx) { ctx.putLong("current.line", line); }
+  @Override public void close() { IOUtils.closeQuietly(br); }
+}
+```
+
+> Claves recomendadas en el contexto: `current.line` y opcionalmente `reader.name`, `last.externalId`.
+
+**3.3 Simulación de fallo para validar restart**
+
+* Lanza una excepción controlada en el **processor** cuando `rowNumber == N` (p. ej., 50.000) para forzar `FAILED`.
+* Relanza el **mismo job** con **los mismos parámetros identificantes** (misma `processingRequestId`, `configId`…), y verifica que el reader se reposiciona.
+
+```java
+JobExecution first = launcher.run(job, params); // falla en N
+JobExecution second = launcher.run(job, params); // restart → COMPLETED
+```
+
+---
+
+### 4) Verificación
+
+* En la primera ejecución, el job cae en `FAILED` tras inyectar la excepción.
+* En la segunda ejecución, el reader **continúa** tras el encabezado + `N` líneas confirmadas.
+* Métrica/logs: `readCount(final) == totalFilas` sin duplicados; `writeCount` consistente.
+
+---
+
+### 5) Criterios de aceptación
+
+* `setSaveState(true)` y `setName(...)` configurados (o reader custom implementa `ItemStream`).
+* Prueba de restart en CI: primera ejecución falla; la segunda concluye **COMPLETED**.
+* La **suma** de `readCount`/`writeCount` de ambas ejecuciones equivale a las filas válidas del archivo (sin relecturas).
+
+---
+
+### 6) Notas / Troubleshooting
+
+* Si no ves reposicionamiento, confirma:
+
+    1. El bean del reader es **@StepScope** y mantiene el **mismo nombre** entre ejecuciones.
+    2. Spring Batch está usando **DB** para metadatos (no in‑memory) en el entorno de prueba.
+    3. No dependes de estado `static` o caches externas no persistidas.
+* Para promover datos del **Step** al **Job** usa `ExecutionContextPromotionListener` (opcional para exponer totales al API).
+
+---
+

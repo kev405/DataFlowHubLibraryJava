@@ -28,6 +28,7 @@ public class CsvImportReaderConfig {
         reader.setName("importRecordReader");
         reader.setEncoding(StandardCharsets.UTF_8.name());
         reader.setResource(new FileSystemResource(storagePath));
+        reader.setSaveState(true);
 
         // Falla si el archivo no existe (puedes poner false si prefieres validar antes)
         reader.setStrict(true);
